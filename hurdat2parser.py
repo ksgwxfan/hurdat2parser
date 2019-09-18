@@ -275,3 +275,23 @@ with open("hurdat_all_05012019.txt","r") as f:
         else:   # Need to add a time-based data-entry record for the storm
             storm[curr_index].addTime(templine)
 # --------------------------------------------------------------------------------
+
+guide = "* Basic Storm Report available via stormStats(str) function.\n" \
+      + "    -- stormStats('AL##YYYY') -- Search for specific ATCFID\n" \
+      + "    -- stormStats('Name') -- Search via Storm Name; returns all matches\n" \
+      + "        --PARTIAL name searches are supported, even if just one character \n" \
+      + "        --* At least two characters are recommended due to likely high-volume of results using one\n" \
+      + "    -- stormStats('YYYY') -- Search and return records for an entire season\n\n" \
+      + "* Basic Seasonal Stats available via seasonStats(year1,*year2) function.\n" \
+      + "    -- seasonStats(2005,2010) -- Example of input\n" \
+      + "    -- 2nd year is optional. If included, it will aggregate stats from the range of seasons\n\n" \
+      + "* Basic Storm Rankings available via rankStats(intqty,'attribute',*year1,*year2) function.\n" \
+      + "    -- rankStats(5,'maxwind',1967,2018) -- Example of input\n" \
+      + "    --        ^     ^      ^    ^\n" \
+      + "    --     Report  Attr-  Yr1  Yr2\n" \
+      + "    --       QTY   ibute\n" \
+      + "    -- The above syntax would give you the storms between 1967 and 2018 that have values equal to \n" \
+      + "    --     the top 5 values of desired attribute.\n" \
+      + '    -- * Valid attributes (as of this release) are "maxwind", "minmslp", "landfalls", or "ACE"\n' \
+      + "    -- * CAREFUL! Lists are likely to be long with storms having similar values. For example, ranking \n" \
+      + "           the top 20 'maxwind' values will generate a long list, with storms ranging from Cat 1 to Cat 5"
