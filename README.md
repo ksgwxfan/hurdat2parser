@@ -1,8 +1,9 @@
+
 # hurdat2parser
 
-HURDAT2 [https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat) is a collection of individual records of Tropical Cyclones (the Atlantic is focused here), pieced together all in one file. The record goes from 1851 to the last complete season, typically released in May of each year. Storms in the record include subrecords of different times which yields a storm-track. Each of which have important data like center coordinates,wind speeds, pressures, designation status, landfalls, and more.
+HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of individual records of Tropical Cyclones. The Atlantic is focused here, but the NW Pacific HURDAT could easily be implemented via editing of string in parser file. The record goes from 1851 to the last complete season, typically released in May of each year. Storms in the record include subrecords of different times which yields a storm-track. Each of which have important data like center coordinates,wind speeds, pressures, designation status, landfalls, and more.
 
-This script was made by analyzing the HURDAT2 record. Each storm is treated like an object. Each time-entry is treated like a sub-object within the storm. This allows easier work with the data. Included is 'hurdat_all_05012019.txt' which is the latest (as of release) of the HURDAT2 data. A secondary script, 'hurdat2custom.py', is included. The intent is to allow further manipulation of the data to fit your needs, without the clutter of the main parser file. I like CSV's. Excel (and like-programs) are amazing at quick analysis. So outputting to CSV's enables a lot of possibilities, like placing maxwinds, minmslp, and ACE in one spreadsheet, enabling easy GUI sorting of the data. You could output the data to GIS or KML formats for mapping analysis and visualization. I included a simple function in the file demonstrating use.
+Each storm is treated like its own object. Every time-entry is treated like a sub-object within each storm. This allows easier work with the data. Included is `hurdat_all_05012019.txt` which is the latest (as of release) of the HURDAT2 data. A secondary script, `hurdat2custom.py`, is included. The intent is to allow further manipulation of the data to fit your needs, without the clutter of the main parser file. I like CSV's. Excel (and like-programs) are amazing at quick analysis. So outputting to CSV's enables a lot of possibilities, like placing maxwinds, minmslp, and ACE in one spreadsheet, enabling easy GUI sorting of the data.
 
 When working with data attributes already in the parser script, you can iterate through each storm via:
 ```python
@@ -19,73 +20,71 @@ for x in storm:
 ```
 - entry attributes can be accessed via y.attributeName or getattr(y,"attributeName")
 
-### Included Console Functions
+## Included Console Functions
 #### stormStats()
-```python
+```
 >>> stormStats(str)
 ```
 This function searches the hurdat2 record for matches to the provided string. Its intent is to return individual storm data. It can also be used to return all data from a specific year or name. Even partial name matching is supported.
 
-```python
+```
 >>> stormStats("AL122005")
 ```
 - Using the ATCFID syntax (AL##YYYY), you can return information based on a specific storm in the archive
 
-```python
+```
 >>> stormStats("2005")
 ```
 - Simply using a year (still as a string), you can return all individual storm data from the specified year
 
-```python
+```
 >>> stormStats("KATRINA")
 ```
 - Searching via name will return (if it exists) all storms in the record that were issued that name
 - Searching partials, for example, "Ka", or "Hu" would return all storms in the record with names that start with "KA" or "HU"
 
 #### seasonStats()
-```python
+```
 >>> seasonStats(int,*int)
 ```
 This function collects and reports basic statistics from an entire TC season(s). Simply put a valid search year in the field
 
-```python
+```
 >>> seasonStats(2005)
 ```
 - This will return some stats on TC year, 2005.
-```python
+```
 >>> seasonStats(2006,2015)
 ```
 - This will return combined stats for years within the 2006 and 2015 range
 
 #### rankStats()
-```python
+```
 >>> rankStats(int,str,*int,*int)
 ```
 This function directly compares individual storms to one another, returning ranks, including ties.
 - It should be thought of as more of a rank of stats, than of storms, but alas.
 - If not careful, the returned report could be really long. If comparing winds, there are a lot of duplicate entries due to official measurements being in 5kt increments.
-```python
+```
 >>> rankStats(10,"minmslp")
 ```
 - This would return the storms in the record with the top 10 unique, lowest mslp values
 
 Optional arguments can be placed to window the rank results to certain years
-```python
+```
 >>> rankStats(10,"maxwind",2000)
 ```
 - This would return the top 10 values of maxwind ONLY from the 2000 season
-
-
-```python
+```
 >>> rankStats(20,"minmslp",1967,2018)
 ```
 - This would return storms with the top 20 values of minimum MSLP within the range of 1967 and 2018
 
 *As of this release, possible attributes available for ranking include: "maxwind", "minmslp", "landfalls", "HDP, "ACE"*
 
-### Console Function Output Examples
+## Console Function Output Examples
 
-```python
+```
 >>> stormStats("AL122005")
 -----------------------
 * ATCF Id: AL122005
@@ -102,7 +101,7 @@ Optional arguments can be placed to window the rank results to certain years
 * Landfall: Yes, 3 Record(s)
 ```
 
-```python
+```
 >>> seasonStats(2006,2014)
 --------------------------------------------------------
 Tropical Cyclone Stats, Between Years 2006-2014
@@ -118,7 +117,7 @@ Hurricane-strength Landfalling Systems: 25
 --
 ```
 
-```python
+```
 >>> rankStats(10,"minmslp",1967,2018)
 Storms Ranked by minmslp, 1967-2018
 Rank  YEAR  NAME      minmslp
@@ -136,9 +135,9 @@ Rank  YEAR  NAME      minmslp
   10  2017  IRMA        914
 ```
 
-### Storm and Entry Attributes w/Explanations
+## Storm and Entry Attributes w/Explanations
 Storm Attributes:
-```python
+```
 maxwind			--> Storm's maximum max-sustained winds (int)
 HDP 			--> Storm's Hurricane Destruction Potential (float)
 ACE				--> Storm's Accumulated Cyclone Energy (float)
@@ -155,8 +154,8 @@ maxwindstatus	--> Records status of storm during the time of its peak winds (str
 Entry 			--> list of objects corresponding to specific entries for the storm
 ```
 
-Entry Attributes:
-```python
+per-Entry Attributes:
+```
 entryday 		--> raw string of the observation date in the format YYYYMMDD (str)
 entryhour 		--> raw string of the observation time in UTC (ex. "0600") (str)
 entrytime 		--> Python datetime object of the entry
@@ -177,12 +176,38 @@ huNE	huSE	huSW	huNW	--> Radii of hurricane-strength winds (str)
 ```
 - Yes, all that data is held in or derived from HURDAT2!
 - Not all data attributes are defined for all storms, especially older storms
+## Calculation Explanations
+##### HDP (Hurricane Destruction Potential) 
+- values were calculated via squaring max-sustained winds, then summed if winds were >= 64 knots (Hurricane force). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStats)
+		- *Bell, "Climate Assessment for 1999", Bulletin of the American Meteorological Society, p.S19*
 
+##### ACE (Accumulated Cyclone Energy)
+- values were calculated using similar convention as HDP. Except values where winds were >= 34kts (TS-force) were used. Values are then scaled (except for in rankStats)
 
+##### Saffir-Simpson scale (.ss_scale)
+- values are solely based on max-sustained winds at the time of observation.
+	-	Missing wind data returns a "-1"
+	-	TS strength returns "0"
 
+##### seasonStats()
+- Hurricane quantities are exclusive of tropical storm quantities, but are inclusive of Major Hurricane quantities
+- Seasonal Landfalls are irrespective to geographic locale. Maybe in a future release, US landfalls can be decifered from the data (feel free to work on your own)
+- Seasonal landfall quantities are irrespective to the quantity of landfalls a single storm makes. So storms only contribute a max of 1 to the seasonal landfall total
+## Usage / Attribution
+- License is GNUv3. Feel free to use/inspect/modify/improve however you wish. If you'd like, let me know how you used it in a project/research you're doing.
 
+## Roadmap
+#### Function Tweaking
+- Add SS scale duration
 
+#### GIS Function
+- Text-delimited format for import in GIS programs
+- Inclusion of ID's and lat/long points; and other attributes
 
+#### Season Objects
+- Allow easy iteration through entire seasons
+- Allow easier comparison of season-to-season data
 
-
-
+## Contact / Comments
+- Questions/Corrections/Issues/Ideas/Explanations/Comments can all be made via my github
+- Kyle S. Gentry, UNCC '17
