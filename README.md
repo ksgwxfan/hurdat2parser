@@ -203,6 +203,7 @@ huNE	huSE	huSW	huNW	--> Radii of hurricane-strength winds (str)
 #### GIS Function
 - Text-delimited format for import in GIS programs
 - Inclusion of ID's and lat/long points; and other attributes
+- KML output for Google Earth or other GIS viewing
 
 #### Season Objects
 - Allow easy iteration through entire seasons
