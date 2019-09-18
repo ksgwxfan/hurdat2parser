@@ -179,7 +179,7 @@ huNE	huSE	huSW	huNW	--> Radii of hurricane-strength winds (str)
 ## Calculation Explanations
 ##### HDP (Hurricane Destruction Potential) 
 - values were calculated via squaring max-sustained winds, then summed if winds were >= 64 knots (Hurricane force). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStats)
-		- *Bell, "Climate Assessment for 1999", Bulletin of the American Meteorological Society, p.S19*
+- *Bell, "Climate Assessment for 1999", Bulletin of the American Meteorological Society, p.S19*
 
 ##### ACE (Accumulated Cyclone Energy)
 - values were calculated using similar convention as HDP. Except values where winds were >= 34kts (TS-force) were used. Values are then scaled (except for in rankStats)
