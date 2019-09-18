@@ -140,7 +140,7 @@ Storm Attributes:
 ```
 maxwind			--> Storm's maximum max-sustained winds (int)
 HDP 			--> Storm's Hurricane Destruction Potential (float)
-ACE				--> Storm's Accumulated Cyclone Energy (float)
+ACE			--> Storm's Accumulated Cyclone Energy (float)
 minmslp 		--> Storm's Lowest MSLP entry (int)
 landfalls 		--> Quantity (int) of landfalls in the storm's record
 LHUStrength		--> bool indicating if a landfall was made at hurricane-strength
@@ -150,7 +150,7 @@ MHUreach 		--> bool indicating if TC ever reached Major Hurricane Status
 atcfid 			--> the unique ATCFID of the storm in HURDAT2 (format: "AL##YYYY") (str)
 year 			--> Season (year) that the TC took place in (str)
 name 			--> Given name of the storm (str)
-maxwindstatus	--> Records status of storm during the time of its peak winds (str)
+maxwindstatus		--> Records status of storm during the time of its peak winds (str)
 Entry 			--> list of objects corresponding to specific entries for the storm
 ```
 
@@ -159,7 +159,7 @@ per-Entry Attributes:
 entryday 		--> raw string of the observation date in the format YYYYMMDD (str)
 entryhour 		--> raw string of the observation time in UTC (ex. "0600") (str)
 entrytime 		--> Python datetime object of the entry
-recidentifier 	--> Special marker (if any) for the entry (ex. "L"-landfall) (str)
+recidentifier 		--> Special marker (if any) for the entry (ex. "L"-landfall) (str)
 status			--> TC designation at time of observation (str)
 lat 			--> raw latitude (ex. "25.5N") (str)
 latdec 			--> latitude in decimal form (ex. 25.5) (float)
