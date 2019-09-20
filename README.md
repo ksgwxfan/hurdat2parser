@@ -245,6 +245,7 @@ year				--> TC season (str)
 ##### Various
 - Change TS-related tallies, within storm and season objects, to be exclusive of hurricanes or hurricane-strength storms
 - Comment script better to match extent of readme
+- investigate seasonal landfall totals. It's possible for storms to make 1 landfall at TS strength, and another at hurricane strength. Currently, TS-strength landfalls are assumed inclusive of HU-strength landfalls. Although likely minor in effect, the aformentioned intention to change TS tallies to be exclusive is more likely to be undertaken
 
 ## Changes / Fixes
 v1.1 (unreleased)
@@ -257,7 +258,7 @@ v1.1 (unreleased)
 
 v1.2
 - Added Landfalls at TS-strength to storm objects and season objects and seasonStats()
-- Added storm and season objects to reflect if a storms reach at least TS and HU strength during their life cycles; to reflect HDP and ACE calculations in v1
+- Added storm and season objects to reflect if a storms reach at least TS and HU strength during their life cycles; to reflect HDP and ACE calculations in v1, and to denote extratropical and subtropical storms.
 - Modified TSreach storm attr to remove SS designation as Sub-tropical storms can exceed HU-strength. It now only reflects if a "TS" status exists in the storm's record
 - Added Major HDP to storm and season objects, and stat functions. It's the same as HDP, only reflecting times that a hurricane is at Major (Cat 3,4,5) strength
 - Add notes to readme / Calculation Explanations about how TS calcs include HU strength storms
