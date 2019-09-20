@@ -236,6 +236,7 @@ year				--> TC season (str)
 ## Roadmap
 ##### Function Tweaking
 - Add SS scale duration
+- Allow stormStats() function to accept an integer year
 
 ##### GIS Function
 - Text-delimited format for import in GIS programs
