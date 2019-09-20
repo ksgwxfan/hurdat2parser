@@ -20,6 +20,8 @@ for x in storm:
 ```
 - entry attributes can be accessed via y.attributeName or getattr(y,"attributeName")
 
+- !!! WARNING !!! - TS-related tallies, right now, are inclusive of hurricane-strength storms. This will likely be changed in the future.
+
 ## Included Console Functions
 #### stormStats()
 ```
