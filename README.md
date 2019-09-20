@@ -213,6 +213,9 @@ year				--> TC season (str)
 ##### ACE (Accumulated Cyclone Energy)
 - values were calculated using similar convention as HDP. Except values where winds were >= 34kts (TS-force) were used. Values are then scaled (except for in rankStats)
 
+##### MHDP (Major Hurricane Destruction Potential)
+- This parameter has the same convention as HDP, except only values where the storm met or exceeded Category 3 strength (>= 96kts), were used
+
 ##### Saffir-Simpson scale (.ss_scale)
 - values are solely based on max-sustained winds at the time of observation.
 	-	Missing wind data returns a "-1"
