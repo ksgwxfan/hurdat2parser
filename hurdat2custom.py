@@ -1,4 +1,4 @@
-from hurdat2parser import storm,stormStats,seasonStats,rankStats,guide
+from hurdat2parser import storm,season,stormStats,seasonStats,rankStats,guide
 
 # HURDAT2 Record goes from 1851 to last year
 # Set the 'minyear' and 'maxyear' to operate on a range of years
