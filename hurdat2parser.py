@@ -1,4 +1,4 @@
-# hurdat2parser -- v1.2 -- Kyle S. Gentry 
+# hurdat2parser.py -- By Kyle Gentry
 # This site showed me the basis of nesting objects (classes): https://www.novixys.com/blog/nested-inner-classes-python/
 
 import datetime
@@ -233,7 +233,12 @@ def seasonStats(yr,*args):
     print("Hurricane-strength Landfalling Systems: {}".format(totalLHU))
     print("--")
 
-def rankStats(tcqty,st_attribute,*args):
+def rankStorms(tcqty,st_attribute,*args,**kwargs):
+    """rankStorms(10,"ACE",1967,2018,**reverse=False)
+             (quantity,attribute,year1(optional),year2(optional))
+             Valid Attributes: "maxwind","minmslp","landfalls","MHDP","HDP","ACE"
+             ** UNSTABLE ** OPTIONAL kwarg: reverse=bool ... set to True to invert the ranking results
+    """
     if len(args) > 3: return print("* OOPS! 3 seperate year values entered instead of 2. Try again *")
     # Enables user to dictate what years ranked values will be drawn from
     if len(args) == 2:
@@ -260,18 +265,23 @@ def rankStats(tcqty,st_attribute,*args):
                         # tcqty tells us how many to keep in the list
     for x in storm:
         if int(x.atcfid[4:8]) >= year1 and int(x.atcfid[4:8]) <= year2:
-            validstorms.append(x)
+            if st_attribute == "minmslp":
+                if x.minmslp != 9999: validstorms.append(x)
     if st_attribute == "minmslp":   # If we're dealing with minmslp, don't include reverse (we want lowest to highest)
-        rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute))
+        if "reverse" in kwargs: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute),reverse=kwargs["reverse"])
+        else: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute))
     elif st_attribute in ["maxwind","minmslp","landfalls","MHDP","HDP","ACE"]:
-        rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute), reverse=True)
+        if "reverse" in kwargs:
+            if kwargs["reverse"] == True: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute))
+            else: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute),reverse=kwargs["reverse"])
+        else: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute), reverse=True)
     else: return print("OOPS! '{}' is not a supported attribute for ranking".format(st_attribute))
     # This block will help us list storms that have equal values (so list will return storms with same values
     #   giving us a list of storms with the top # of unique values of attribute)
     uniquevalues = []
     # 'rankadded' will be a parallel-array marker to 'uniquevalues' to know when to add a rank to the output
     rankadded = []
-    for x in rank:  
+    for x in rank:
         if getattr(x,st_attribute) not in uniquevalues: uniquevalues.append(getattr(x,st_attribute))
     uniquevalues = uniquevalues[0:tcqty]    # only keeps the top x values
     for x in range(len(uniquevalues)):
@@ -279,18 +289,299 @@ def rankStats(tcqty,st_attribute,*args):
     if len(rank) < tcqty or len(args) == 1: tcqty = len(rank)
 
     # PRINT OUT REPORT
-    if len(args) == 1: print("Storms Ranked by {}, {}".format(st_attribute,year1))
-    else: print("Storms Ranked by {}, {}-{}".format(st_attribute,year1,year2))
-    print("Rank  YEAR  NAME      {}\n-----------------------------------".format(st_attribute))
+    print("{:-^35}".format(""))
+    if len(args) == 1: print("{:^35}".format("Storms Ranked by {}, {}".format(st_attribute,year1)))
+    else: print("{:^35}".format("Storms Ranked by {}, {}-{}".format(st_attribute,year1,year2)))
+    print("{:4}  {:4}  {:^12}  {:^10}".format("Rank","Year","Name","Value"))
+    print("{:-^4}  {:-^4}  {:-^12}  {:-^10}".format("","","",""))
     rank_ind = 0     # Will be used for in format of ranking (to place rank numbers)
     for x in range(len(rank)):
         if getattr(rank[x],st_attribute) in uniquevalues:
             if rankadded[uniquevalues.index(getattr(rank[x],st_attribute))] == False:
-                print("{:>4}  {}  {:10}  {}".format(rank_ind + 1,rank[x].year,rank[x].name,getattr(rank[x],st_attribute)))
+                print("{:>4}  {:4}  {:12}  {:^10}".format(rank_ind + 1,rank[x].year,rank[x].name,getattr(rank[x],st_attribute)))
                 rankadded[uniquevalues.index(getattr(rank[x],st_attribute))] = True
                 rank_ind += 1
             else:
-                print("{:>4}  {}  {:10}  {}".format(" ",rank[x].year,rank[x].name,getattr(rank[x],st_attribute)))
+                print("{:>4}  {:4}  {:<12}  {:^10}".format(" ",rank[x].year,rank[x].name,getattr(rank[x],st_attribute)))
+
+
+def rankSeasons(seasonqty,sn_attribute,*args):
+    """rankSeasons(10,"tracksHU",1950,2000)
+             (quantity,attribute,year1(optional),year2(optional))
+             Valid Attributes (sn_attribute): "tracks","tracksTS","tracksTSstrength","tracksHU",
+                                            "tracksHUstrength","tracksMHU","MHDP","HDP","ACE",
+                                            "landfalls","landfallsTS","landfallsHU"
+    """
+    validseasons = []
+    if len(args) > 3: return print("* OOPS! 3 seperate year values entered instead of 2. Try again *")
+    # Enables user to dictate what years ranked values will be drawn from
+    if len(args) == 2:
+        try:
+            year1 = int(args[0])
+            year2 = int(args[1])
+            if year1 > year2 or year1 < 1851 or year2 > int(storm[len(storm)-1].year) or year2-year1 < 4:
+                return print("* OOPS! Double-check your years. Try again. Valid years range from {}-{}, and must be 9+ years apart *".format(1851,int(storm[len(storm)-1].year)))
+        except:
+            return print("* OOPS! Your years must numeric!")
+    # If only one year is submitted, it is treated as the start year (year1) for the analysis
+    elif len(args) == 1:
+        try:
+            year1 = int(args[0])
+            year2 = int(storm[len(storm)-1].year)
+            if year1 < 1851 or year1 > year2 or year2-year1 < 4:
+                return print("* OOPS! Year invalid. It must be <= {} *".format(int(storm[len(storm)-1].year) - 9))
+        except:
+            return print("* OOPS! Year must be numeric!")
+    else:
+        year1 = 1851
+        year2 = int(storm[len(storm)-1].year)
+    #return str(year1) + ", " + str(year2)
+    if type(seasonqty) != int:
+        try:
+            seasonqty = int(seasonqty)
+        except:
+            return print("* OOPS! The season rank quantity must be numeric! *")
+    if seasonqty > year2-year1+1:
+        oldseasonqty = seasonqty
+        seasonqty = year2-year1+1
+        print("* Rank quantities changed from {} to {}".format(oldseasonqty,seasonqty))
+    if seasonqty > 50:
+        seasonqty = 50
+        print("* Rank quantities reduced to 50")
+
+    for x in season:
+        if int(x.year) in range(year1,year2+1):
+            validseasons.append(x)
+
+    validattr = ["tracks","tracksTS","tracksTSstrength","tracksHU","tracksHUstrength","tracksMHU","MHDP","HDP","ACE","landfalls","landfallsTS","landfallsHU"]
+    titles = {"tracks": "Storm Tracks",
+              "tracksTS": "Tropical Storms",
+              "tracksTSstrength": "Tropical Storm-Strength Tracks",
+              "tracksHU": "Hurricanes",
+              "tracksHUstrength":"Hurricane-Strength Storms",
+              "tracksMHU":"Major Hurricanes",
+              "MHDP":"Major-Hurricane Destruction Potential",
+              "HDP":"Hurricane Destruction Potential",
+              "ACE":"Accumulated Cyclone Energy",
+              "landfalls":"Landfalling Systems",
+              "landfallsTS":"Landfalling Tropical Storm-Strength Systems",
+              "landfallsHU":"Landfalling Hurricane-Strength Systems"}
+    
+    if sn_attribute not in validattr: return print("* OOPS! Attributes are case-sensitive. Valid attributes: {} *".format(validattr))
+
+    rank_desc = sorted(validseasons,key=lambda sn: getattr(sn,sn_attribute),reverse=True)
+    rank_asc = sorted(validseasons,key=lambda sn: getattr(sn,sn_attribute))
+
+    # Print Report
+    print("{:-^39}".format(""))
+    print("{:^39}".format(titles[sn_attribute]))
+    print("{:^39}".format("Top {} Seasons, {}-{}".format(seasonqty,year1,year2)))
+    print("{:-^39}".format(""))
+    print("{:^19}|{:^19}".format("MOST","LEAST"))
+    print("{:-^19}|{:-^19}".format("",""))
+    i = 1
+    j = 1
+    ranked_i = []
+    ranked_j = []
+    for x in range(len(rank_desc)):
+        if x == 0:
+            print(" {:2}{} {:4}  {:<7} | {:2}{} {:4}  {:<7} ".format(1,".",
+                                                                     rank_desc[x].year,getattr(rank_desc[x],sn_attribute),
+                                                                     1,".",
+                                                                     rank_asc[x].year,getattr(rank_asc[x],sn_attribute)))
+            ranked_i.append(i)
+            ranked_j.append(j)
+        else:
+            if i not in ranked_i and i <= seasonqty: ranked_i.append(i)
+            if j not in ranked_j and j <= seasonqty: ranked_j.append(j)
+            if getattr(rank_desc[x],sn_attribute) != getattr(rank_desc[x-1],sn_attribute): i += 1
+            if getattr(rank_asc[x],sn_attribute) != getattr(rank_asc[x-1],sn_attribute): j += 1
+            if i <= seasonqty or j <= seasonqty:
+                print(" {:2}{} {:4}  {:<7} | {:2}{} {:4}  {:<7} ".format(i if i not in ranked_i and i <= seasonqty else "",
+                                                                         "." if i not in ranked_i and i <= seasonqty else " ",
+                                                                         rank_desc[x].year if i <= seasonqty else "",
+                                                                         getattr(rank_desc[x],sn_attribute) if i <= seasonqty else "",
+                                                                         j if j not in ranked_j and j <= seasonqty else "",
+                                                                         "." if j not in ranked_j and j <= seasonqty else " ",
+                                                                         rank_asc[x].year if j <= seasonqty else "",
+                                                                         getattr(rank_asc[x],sn_attribute) if j <= seasonqty else ""))
+        if i > seasonqty and j > seasonqty: break
+
+def stormCSV():
+    stormatts = ["ATCFID",
+                 "Year",
+                 "Name",
+                 "Track Duration (hrs)",
+                 "Peak MSLP (lowest)",
+                 "Peak Max-Sustained Winds",
+                 "Major-Hurricane Destruction Potental (MHDP) (kts^2 * 10^(-4))",
+                 "Hurricane Destruction Potential (HDP) (kts^2 * 10^(-4))",
+                 "Accumulated Cyclone Energy (ACE) (kts^2 * 10^(-4))",
+                 "Landfalls (total)",
+                 "Landfall at TS strength?",
+                 "Landfall at HU strength?"]
+    
+    with open("hurdat2STORMoutput.csv","w") as w:
+        for x in range(len(stormatts)):
+            w.write(stormatts[x]+ "," if stormatts.index(stormatts[x]) != len(stormatts)-1 else stormatts[x] + "\n")
+        for x in storm:
+            w.write(x.atcfid + ",")
+            w.write(x.year + ",")
+            w.write(x.name + ",")
+            st = x.Entry[0].entrytime
+            en = x.Entry[len(x.Entry)-1].entrytime
+            duration_in_hrs = (en - st).days * 24 + (en - st).seconds / 60 / 60
+            w.write("{},".format(duration_in_hrs))
+            w.write("{},".format(x.minmslp) if x.minmslp != 9999 else "N/A,")
+            w.write("{},".format(x.maxwind) if x.maxwind != -1 else "N/A,")
+            w.write("{},".format(round(x.MHDP*10**(-4),2)))
+            w.write("{},".format(round(x.HDP*10**(-4),2)))
+            w.write("{},".format(round(x.ACE*10**(-4),2)))
+            w.write("{},".format(x.landfalls))
+            w.write("{},".format(x.LTSstrength))
+            w.write("{}\n".format(x.LHUstrength))
+
+def seasonCSV():
+    stormatts = ["Season",
+                 "Tracked Systems",
+                 "Tropical Storms",
+                 "Tropical Storm Strength Systems",
+                 "Hurricanes",
+                 "Hurricane-Strength Systems",
+                 "Major Hurricanes",
+                 "Major Hurricane Destruction Potential (MHDP) (kts^2 * 10^(-4))",
+                 "Hurricane Destruction Potential (HDP) (kts^2 * 10^(-4))",
+                 "Accumulated Cyclone Energy (ACE) (kts^2 * 10^(-4))",
+                 "Landfalling Systems",
+                 "Landfalling Systems at Tropical Storm Strength",
+                 "Landfalling Systems at Hurricane Srength"]
+    
+    with open("hurdat2SEASONoutput.csv","w") as w:
+        for x in range(len(stormatts)):
+            w.write(stormatts[x]+ "," if stormatts.index(stormatts[x]) != len(stormatts)-1 else stormatts[x] + "\n")
+        for x in season:
+            w.write("{},".format(x.year))
+            w.write("{},".format(x.tracks))
+            w.write("{},".format(x.tracksTSstrength-x.tracksHUstrength))
+            w.write("{},".format(x.tracksHUstrength))
+            w.write("{},".format(x.tracksMHU))
+            w.write("{},".format(round(x.MHDP*10**(-4),2)))
+            w.write("{},".format(round(x.HDP*10**(-4),2)))
+            w.write("{},".format(round(x.ACE*10**(-4),2)))
+            w.write("{},".format(x.landfalls))
+            w.write("{},".format(x.landfallsTS))
+            w.write("{}\n".format(x.landfallsHU))
+
+def climoCSV():
+    ystart = int(storm[0].year)
+    yend = int(storm[len(storm)-1].year)
+
+    climo10yrs = {}
+    for x in range(ystart,yend+1-9):
+        climo10yrs[(x,x+9)] = {"ystart":x,"yend":x+9,"tracks":0,"tracksTS":0,"tracksTSstrength":0,"tracksHU":0,"tracksHUstrength":0,"tracksMHU":0,
+                                "MHDP":0,"HDP":0,"ACE":0,"landfalls":0,"landfallsTS":0,"landfallsHU":0}
+
+    climo30yrs = {}
+    for x in range(ystart,yend+1-29):
+        climo30yrs[(x,x+29)] = {"ystart":x,"yend":x+29,"tracks":0,"tracksTS":0,"tracksTSstrength":0,"tracksHU":0,"tracksHUstrength":0,"tracksMHU":0,
+                                "MHDP":0,"HDP":0,"ACE":0,"landfalls":0,"landfallsTS":0,"landfallsHU":0}
+
+    for x in climo10yrs:
+        for y in season:
+            if int(y.year) >= climo10yrs[x]["ystart"] and int(y.year) <= climo10yrs[x]["yend"]:
+                #input("{} in {}-{}".format(y.year,climo10yrs[x]["ystart"],climo10yrs[x]["yend"]))
+                climo10yrs[x]["tracks"] += y.tracks
+                climo10yrs[x]["tracksTS"] += y.tracksTS
+                climo10yrs[x]["tracksTSstrength"] += y.tracksTSstrength
+                climo10yrs[x]["tracksHU"] += y.tracksHU
+                climo10yrs[x]["tracksHUstrength"] += y.tracksHUstrength
+                climo10yrs[x]["tracksMHU"] += y.tracksMHU
+                climo10yrs[x]["MHDP"] += y.MHDP
+                climo10yrs[x]["HDP"] += y.HDP
+                climo10yrs[x]["ACE"] += y.ACE
+                climo10yrs[x]["landfalls"] += y.landfalls
+                climo10yrs[x]["landfallsTS"] += y.landfallsTS
+                climo10yrs[x]["landfallsHU"] += y.landfallsHU
+    #for x in climo10yrs:
+        #print("{}-{} - {}".format(climo10yrs[x]["ystart"],climo10yrs[x]["yend"],climo10yrs[x]["tracks"]))
+
+    for x in climo30yrs:
+        for y in season:
+            if int(y.year) >= climo30yrs[x]["ystart"] and int(y.year) <= climo30yrs[x]["yend"]:
+                climo30yrs[x]["tracks"] += y.tracks
+                climo30yrs[x]["tracksTSstrength"] += y.tracksTSstrength
+                climo30yrs[x]["tracksHUstrength"] += y.tracksHUstrength
+                climo30yrs[x]["tracksMHU"] += y.tracksMHU
+                climo30yrs[x]["MHDP"] += y.MHDP
+                climo30yrs[x]["HDP"] += y.HDP
+                climo30yrs[x]["ACE"] += y.ACE
+                climo30yrs[x]["landfalls"] += y.landfalls
+                climo30yrs[x]["landfallsTS"] += y.landfallsTS
+                climo30yrs[x]["landfallsHU"] += y.landfallsHU
+                
+    stormatts = ["Season",
+                 "Tracked Systems",
+                 "Tropical Storm Strength Systems",
+                 "Hurricane-Strength Systems",
+                 "Major Hurricanes",
+                 "Major Hurricane Destruction Potential (MHDP) (kts^2 * 10^(-4))",
+                 "Hurricane Destruction Potential (HDP) (kts^2 * 10^(-4))",
+                 "Accumulated Cyclone Energy (ACE) (kts^2 * 10^(-4))",
+                 "Landfalling Systems",
+                 "Landfalling Systems at Tropical Storm Strength",
+                 "Landfalling Systems at Hurricane Srength"]
+
+    with open("hurdat2CLIMO_10yrs.csv","w") as w:
+        for x in range(len(stormatts)):
+            w.write(stormatts[x]+ "," if stormatts.index(stormatts[x]) != len(stormatts)-1 else stormatts[x] + "\n")
+        for x in climo10yrs:
+            w.write("{}-{},".format(climo10yrs[x]["ystart"],climo10yrs[x]["yend"]))
+            w.write("{},".format(climo10yrs[x]["tracks"]))
+            w.write("{},".format(climo10yrs[x]["tracksTSstrength"]-climo10yrs[x]["tracksHUstrength"]))
+            w.write("{},".format(climo10yrs[x]["tracksHUstrength"]))
+            w.write("{},".format(climo10yrs[x]["tracksMHU"]))
+            w.write("{},".format(round(climo10yrs[x]["MHDP"]*10**(-4),2)))
+            w.write("{},".format(round(climo10yrs[x]["HDP"]*10**(-4),2)))
+            w.write("{},".format(round(climo10yrs[x]["ACE"]*10**(-4),2)))
+            w.write("{},".format(climo10yrs[x]["landfalls"]))
+            w.write("{},".format(climo10yrs[x]["landfallsTS"]))
+            w.write("{}\n".format(climo10yrs[x]["landfallsHU"]))
+
+    with open("hurdat2CLIMO_30yrs.csv","w") as w:
+        for x in range(len(stormatts)):
+            w.write(stormatts[x]+ "," if stormatts.index(stormatts[x]) != len(stormatts)-1 else stormatts[x] + "\n")
+        for x in climo30yrs:
+            w.write("{}-{},".format(climo30yrs[x]["ystart"],climo30yrs[x]["yend"]))
+            w.write("{},".format(climo30yrs[x]["tracks"]))
+            w.write("{},".format(climo30yrs[x]["tracksTSstrength"]-climo30yrs[x]["tracksHUstrength"]))
+            w.write("{},".format(climo30yrs[x]["tracksHUstrength"]))
+            w.write("{},".format(climo30yrs[x]["tracksMHU"]))
+            w.write("{},".format(round(climo30yrs[x]["MHDP"]*10**(-4),2)))
+            w.write("{},".format(round(climo30yrs[x]["HDP"]*10**(-4),2)))
+            w.write("{},".format(round(climo30yrs[x]["ACE"]*10**(-4),2)))
+            w.write("{},".format(climo30yrs[x]["landfalls"]))
+            w.write("{},".format(climo30yrs[x]["landfallsTS"]))
+            w.write("{}\n".format(climo30yrs[x]["landfallsHU"]))
+                
+
+"""class Season:
+    tracks = 0
+    tracksTS = 0
+    tracksTSstrength = 0
+    tracksHU = 0
+    tracksHUstrength = 0
+    tracksMHU = 0
+    MHDP = 0
+    HDP = 0
+    ACE = 0
+    #avgMINmslp
+    landfalls = 0
+    landfallsTS = 0
+    landfallsHU = 0
+
+    def __init__(self,year):
+        self.year = year    # year in str form
+"""
 
 # MAIN PROGRAM -------------------------------------------------------------------
 print("* Now formulating Storm objects *")
@@ -344,26 +635,41 @@ for yr in range(1851,int(storm[len(storm)-1].year) + 1):
             season[len(season)-1].HDP += x.HDP
             season[len(season)-1].ACE += x.ACE
 
-print("* SCRIPT COMPLETE. HURDAT2 record goes from 1851 to {}.\n* Type 'print(guide)' ".format(storm[len(storm)-1].year) \
-      + "(w/o quotes) to see available internal, console options")
-# --------------------------------------------------------------------------------
+def guide():
+    print("-----------------------------------------------------------------------------------------")
+    print("* Basic Storm Report available via stormStats(str) function.")
+    print("    >>> stormStats('AL##YYYY') -- Search for specific ATCFID")
+    print("    >>> stormStats('Name') -- Search via Storm Name; returns all matches")
+    print("        - PARTIAL name searches are supported, even if just one character ")
+    print("        - At least two characters are recommended due to likely high-volume of results using one")
+    print("    >>> stormStats('YYYY') -- Search and return records for an entire season\n")
+    print("* Basic Seasonal Stats available via seasonStats(year1,*year2) function.")
+    print("    >>> seasonStats(2005,2010) -- Example of input")
+    print("    - 2nd year is optional. If included, it will aggregate stats from the range of seasons\n")
+    print("* Basic Storm Rankings available via rankStorms(intqty,'attribute',*year1,*year2) function.")
+    print("    >>> rankStorms(5,'maxwind',1967,2018,**reverse=False) -- Example of input")
+    print("                   ^     ^      ^    ^          ^")
+    print("                Report  Attr-   Yr1  Yr2     reverse")
+    print("                 QTY   ibute  (opt) (opt)     (opt)")
+    print("    - The above syntax would give you the storms between 1967 and 2018 that have values equal to ")
+    print("      the top 5 values of desired attribute.")
+    print("    - ** UNSTABLE** OPTIONAL kwarg of reverse is there if you want to attempt ot invert the rankings")
+    print("* Basic Season Rankings available via rankSeasons(intqty,'attribute',*year1,*year2) function.")
+    print("    >>> rankSeasons(10,'tracksHU',1971,2000)     -- Example of input")
+    print("                     ^     ^       ^    ^")
+    print("                  Report  Attr-   Yr1  Yr2")
+    print("                   QTY    ibute  (opt) (opt)")
+    print("    - The above syntax would give you the top 10 seasons of most and least hurricane activity")
+    print("       between 1971 and 2000")
+    print('    - Valid attributes (as of this release) are "tracks","tracksTS","tracksTSstrength","tracksHU"')
+    print('      "tracksHUstrength","tracksMHU","MHDP","HDP","ACE","landfalls","landfallsTS", and "landfallsHU"')
+    print("* Output CSV Format of Data -- Allows simplified intake of parsed-data into a spreadsheet program")
+    print("    >>> stormCSV()    This will output a CSV containing all of the storms in the HURDAT2 record and")
+    print("                          sortable attributes")
+    print("    >>> seasonCSV()   Outputs a CSV with every season in HURDAT2 and their sortable stats")
+    print("-----------------------------------------------------------------------------------------")
 
-guide = "* Basic Storm Report available via stormStats(str) function.\n" \
-      + "    -- stormStats('AL##YYYY') -- Search for specific ATCFID\n" \
-      + "    -- stormStats('Name') -- Search via Storm Name; returns all matches\n" \
-      + "        --PARTIAL name searches are supported, even if just one character \n" \
-      + "        --* At least two characters are recommended due to likely high-volume of results using one\n" \
-      + "    -- stormStats('YYYY') -- Search and return records for an entire season\n\n" \
-      + "* Basic Seasonal Stats available via seasonStats(year1,*year2) function.\n" \
-      + "    -- seasonStats(2005,2010) -- Example of input\n" \
-      + "    -- 2nd year is optional. If included, it will aggregate stats from the range of seasons\n\n" \
-      + "* Basic Storm Rankings available via rankStats(intqty,'attribute',*year1,*year2) function.\n" \
-      + "    -- rankStats(5,'maxwind',1967,2018) -- Example of input\n" \
-      + "    --           ^     ^      ^    ^\n" \
-      + "    --        Report  Attr-   Yr1  Yr2\n" \
-      + "    --          QTY   ibute  (opt) (opt)\n" \
-      + "    -- The above syntax would give you the storms between 1967 and 2018 that have values equal to \n" \
-      + "    --     the top 5 values of desired attribute.\n" \
-      + '    -- * Valid attributes (as of this release) are "maxwind", "minmslp", "landfalls", "MHDP", "HDP", or "ACE"\n' \
-      + "    -- * CAREFUL! Lists are likely to be long with storms having similar values. For example, ranking \n" \
-      + "           the top 20 'maxwind' values will generate a long list, with storms ranging from Cat 1 to Cat 5"
+print("--------------------------------------------------------")
+print("* SCRIPT COMPLETE. HURDAT2 record goes from {} to {}".format(storm[0].year,storm[len(storm)-1].year))
+print("* Enter guide() to see available internal, console options")
+# --------------------------------------------------------------------------------

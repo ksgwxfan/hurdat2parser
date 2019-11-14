@@ -1,16 +1,15 @@
+# hurdat2parser -- v1.5
 
-# hurdat2parser -- v1.2
+HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The Atlantic is focused here, but the NW Pacific HURDAT could easily be implemented via editing of string in parser file. The record currently goes from 1851 to the last complete season, typically released in May of each year. Storms in the record include subrecords of different entries entailing winds, pressure, and position of the storm's center. This yields a storm-track.
 
-HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The Atlantic is focused here, but the NW Pacific HURDAT could easily be implemented via editing of string in parser file. The record goes from 1851 to the last complete season, typically released in May of each year. Storms in the record include subrecords of different times which yields a storm-track. Each of which have important data like center coordinates,wind speeds, pressures, designation status, landfalls, and more.
-
-Each storm is treated like its own object. Every time-entry is treated like a sub-object within each storm. This allows easier work with the data. Included is `hurdat_all_05012019.txt` which is the latest (as of release) of the HURDAT2 data. A secondary script, `hurdat2custom.py`, is included. The intent is to allow running of the script or further manipulation of the data to fit your needs, without the clutter of the main parser file. I like CSV's. Excel (and like-programs) are amazing at quick analysis. So outputting to CSV's enables a lot of possibilities, like placing maxwinds, minmslp, and ACE in one spreadsheet, enabling easy GUI sorting of the data.
+Each storm is treated like its own object. Every time-entry is treated like a sub-object within each storm. This allows easier work with the data. Included is `hurdat_all_05012019.txt` which is the latest (as of release) of the HURDAT2 data. A lot of need to introduce your own scripting is eliminated by the [CSV Output Functions](#csv-output-commands), new in v1.5. Climatological Tendency CSV's are produced so you can see how long-term statistics change incrementally.
 
 When working with data attributes already in the parser script, you can iterate through each storm via:
 ```python
 for x in storm:
 	# place code here
 ```
-- storm attributes can be accessed via x.attributeName or getattr(x,"attributeName")
+- storm attributes can be accessed via `x.attributeName` or `getattr(x,"attributeName")`
 
 If you want to iterate through every entry in each storm, simply use the syntax:
 ```python
@@ -18,11 +17,22 @@ for x in storm:
 	for y in Entry:
 		# place code here
 ```
-- entry attributes can be accessed via y.attributeName or getattr(y,"attributeName")
+- entry attributes can be accessed via `y.attributeName` or `getattr(y,"attributeName")`
 
-- !!! WARNING !!! - TS-related tallies, right now, are inclusive of hurricane-strength storms. This will likely be changed in the future.
+- ***!!! WARNING !!! - TS-related tallies, right now, are inclusive of hurricane-strength storms. This might be changed in the future. This is accounted for in ranking and csv functions***
+
+## Contents
+* [Console Functions](#included-console-functions)
+  * [Output Examples](#console-function-output-examples)
+* [Storm Attributes Overview](#storm-and-entry-attributes)
+* [Calculation Explanations](#calculation-explanations)
+* [Usage and Attribution](#usage-and-attribution)
+* [Roadmap](#roadmap)
+* [Changes/Fixes](#changes-and-fixes)
+* [Contact for issues and inquiries](#contact)
 
 ## Included Console Functions
+
 #### stormStats()
 ```
 >>> stormStats(str)
@@ -60,29 +70,59 @@ This function collects and reports basic statistics from an entire TC season(s).
 ```
 - This will return combined stats for years within the 2006 and 2015 range
 
-#### rankStats()
+#### rankStorms()
 ```
->>> rankStats(int,str,*int,*int)
+>>> rankStorms(int,str,*int,*int)
 ```
 This function directly compares individual storms to one another, returning ranks, including ties.
 - It should be thought of as more of a rank of stats, than of storms, but alas.
 - If not careful, the returned report could be really long. If comparing winds, there are a lot of duplicate entries due to official measurements being in 5kt increments.
 ```
->>> rankStats(10,"minmslp")
+>>> rankStorms(10,"minmslp")
 ```
 - This would return the storms in the record with the top 10 unique, lowest mslp values
 
 Optional arguments can be placed to window the rank results to certain years
 ```
->>> rankStats(10,"maxwind",2000)
+>>> rankStorms(10,"maxwind",2000)
 ```
 - This would return the top 10 values of maxwind ONLY from the 2000 season
 ```
->>> rankStats(20,"minmslp",1967,2018)
+>>> rankStorms(20,"minmslp",1967,2018)
 ```
 - This would return storms with the top 20 values of minimum MSLP within the range of 1967 and 2018
 
 *As of this release, possible attributes available for ranking include: "maxwind", "minmslp", "landfalls", "MHDP", "HDP, or "ACE"*
+
+#### rankSeasons()
+```
+>>> rankSeasons(int,str,*int,*int)
+```
+This allows the user to rank based on Seasons in the record. It returns the lowest totals in the record as well. It intakes a quantity (top 5, 10, etc), an attribute, and optionally, a start and end year. Valid attributes as of this release are: `"tracks"`, `"tracksTS"`, `"tracksTSstrength"`, `"tracksHU"`, `"tracksHUstrength"`, `"tracksMHU"`, `"MHDP"`, `"HDP"`, `"ACE"`, `"landfalls"`, `"landfallsTS"`, and `"landfallsHU"`
+
+```
+>>> rankSeasons(10,"ACE")
+```
+This would list the top 10 seasons with the highest and lowest Accumulated Cyclone Energy
+
+```
+>>> rankSeasons(5,"tracksHUstrength",1967)
+```
+This would return the top 5 seasons between 1967 and the end of the record, with the highest and lowest totals of storms that reached hurricane strength at some point in their life
+
+```
+>>> rankSeasons(15,"tracks",1930,1960)
+```
+This returns the top 15 seasons between 1930 and 1960 with the most and fewest tracked-storms
+
+#### CSV Output Commands
+
+These commands output spreadsheet-ready CSV files with sortable attributes based on storm, season, or climatological era (10-yr or 30-yr increments). It will generate the same data each time if using the same hurdat2 file. As such, it's here as needed, but really you only need it once.
+* `stormCSV()` - outputs a CSV of individual storms and data collected via the initial script runtime
+* `seasonCSV()` - like above, but does it for seasons
+* `climoCSV()` - iterates through all seasons and compiles 10-year and 30-year climatologies at 1-year increments, and outputs them to CSV. These then can be loaded into a spreadsheet. This enables, what I term, ***Climatological Tendency*** analysis. You can see how the long-term data has changed over time. I believe it makes it easier to see trends.
+
+[&#8679; back to Contents](#contents)
 
 ## Console Function Output Examples
 
@@ -125,7 +165,7 @@ Hurricane-strength Landfalling Systems: 25
 ```
 
 ```
->>> rankStats(10,"minmslp",1967,2018)
+>>> rankStorms(10,"minmslp",1967,2018)
 Storms Ranked by minmslp, 1967-2018
 Rank  YEAR  NAME      minmslp
 -----------------------------------
@@ -142,7 +182,34 @@ Rank  YEAR  NAME      minmslp
   10  2017  IRMA        914
 ```
 
-## Storm and Entry Attributes w/Explanations
+```
+>>> rankSeasons(10,"MHDP",1967)
+---------------------------------------
+ Major-Hurricane Destruction Potential 
+       Top 10 Seasons, 1967-2018       
+---------------------------------------
+       MOST        |       LEAST       
+-------------------|-------------------
+  1. 2004  1237425 |  1. 1968  0       
+  2. 2017  1117250 |     1972  0       
+  3. 2005  1035275 |     1986  0       
+  4. 2003  929725  |     1994  0       
+  5. 1999  761625  |     2013  0       
+  6. 1996  646075  |  2. 1973  10000   
+  7. 2010  590675  |     1983  10000   
+  8. 1995  583500  |  3. 2012  20000   
+  9. 2016  564875  |  4. 1987  23125   
+ 10. 1989  536175  |  5. 1993  30000   
+                   |  6. 1984  35325   
+                   |  7. 1990  41025   
+                   |  8. 1976  42050   
+                   |  9. 1970  45225   
+                   | 10. 1971  55025 
+```
+
+[&#8679; back to Contents](#contents)
+
+## Storm and Entry Attributes
 Storm Attributes:
 ```
 maxwind			--> Storm's maximum max-sustained winds (int)
@@ -205,13 +272,16 @@ landfallsHU			--> tallied storms that have at least 1 landfall at hurricane stre
 year				--> TC season (str)
 ```
 
+[&#8679; back to Contents](#contents)
+
 ## Calculation Explanations
+
 ##### HDP (Hurricane Destruction Potential) 
-- values were calculated via squaring max-sustained winds, then summed if winds were >= 64 knots (Hurricane force). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStats)
+- values were calculated via squaring max-sustained winds, then summed if winds were >= 64 knots (Hurricane force). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStorms)
 - *Bell, "Climate Assessment for 1999", Bulletin of the American Meteorological Society, p.S19*
 
 ##### ACE (Accumulated Cyclone Energy)
-- values were calculated using similar convention as HDP. Except values where winds were >= 34kts (TS-force) were used. Values are then scaled (except for in rankStats)
+- values were calculated using similar convention as HDP. Except values where winds were >= 34kts (TS-force) were used. Values are then scaled (except for in rankStorms)
 
 ##### MHDP (Major Hurricane Destruction Potential)
 - This parameter has the same convention as HDP, except only values where the storm met or exceeded Category 3 strength (>= 96kts), were used
@@ -227,16 +297,20 @@ year				--> TC season (str)
 - Seasonal landfall quantities are irrespective to the quantity of landfalls a single storm makes. So storms only contribute a max of 1 to the seasonal landfall total
 
 ##### storm and season objects
-- CAREFUL! In almost all cases, TS tallies are **inclusive** of hurricane strength storms. But in the seasonStats() function, and as noted, they are reported as exlcusive amounts
+- CAREFUL! In almost all cases, TS tallies are **inclusive** of hurricane strength storms. But in the `seasonStats()` function, and as noted, they are reported as exlcusive amounts
 
+[&#8679; back to Contents](#contents)
 
-## Usage / Attribution
-- License is GNUv3. Feel free to use/inspect/modify/improve however you wish. If you'd like, let me know how you used it in a project/research you're doing.
+## Usage and Attribution
+- License is GNUv3. If you'd like, let me know how you used it in a project/research you're doing.
+
+[&#8679; back to Contents](#contents)
 
 ## Roadmap
+
 ##### Function Tweaking
-- Add SS scale duration
-- Allow stormStats() function to accept an integer year
+- Add Saffir-Simpson scale duration
+- Allow `stormStats()` function to accept an integer year
 
 ##### GIS Function
 - Text-delimited format for import in GIS programs
@@ -246,24 +320,38 @@ year				--> TC season (str)
 ##### Various
 - Change TS-related tallies, within storm and season objects, to be exclusive of hurricanes or hurricane-strength storms
 - Comment script better to match extent of readme
+- Place instructions in readme of how to use the `season` object list.
 - investigate seasonal landfall totals. It's possible for storms to make 1 landfall at TS strength, and another at hurricane strength. Currently, TS-strength landfalls are assumed inclusive of HU-strength landfalls. Although likely minor in effect, the aformentioned intention to change TS tallies to be exclusive is more likely to be undertaken
 
-## Changes / Fixes
-v1.1 (unreleased)
-- Fixed formatting on print(guide) command
-- Added readouts to assist user to know what script is formulating at the time
-- Added season object (see documentation for attributes)
-- Modified seasonStats() to reflect addition of season object
-- Fixed note in 'Calculation Explanations' that in seasonStats(), TS and HU quantities were only added if they were thus designated and non-ET at the time; and that all with sub-tropical designation were included in calculation of TS
-- Minor tweaks to output of stormStats()
+[&#8679; back to Contents](#contents)
 
-v1.2
-- Added Landfalls at TS-strength to storm objects and season objects and seasonStats()
-- Added storm and season objects to reflect if a storms reach at least TS and HU strength during their life cycles; to reflect HDP and ACE calculations in v1, and to denote extratropical and subtropical storms.
-- Modified TSreach storm attr to remove SS designation as Sub-tropical storms can exceed HU-strength. It now only reflects if a "TS" status exists in the storm's record
-- Added Major HDP to storm and season objects, and stat functions. It's the same as HDP, only reflecting times that a hurricane is at Major (Cat 3,4,5) strength
-- Add notes to readme / Calculation Explanations about how TS calcs include HU strength storms
+## Changes and Fixes
 
-## Contact / Comments
+**Version 1.4**
+* Added CSV Output functions; allowing user to work with the data in a spreadsheet program: `stormCSV()`, `seasonCSV()`, `climoCSV()`
+* Added `rankSeasons()` function, allowing to see the rankings of seasons based on an attribute and optional time-frame
+* `rankStats()` is now `rankStorms()`
+* Removed `hurdat2custom.py` from repository. CSV output functions eliminate most of its use
+
+**Version 1.2**
+* Added Landfalls at TS-strength to storm objects and season objects and seasonStats()
+* Added storm and season objects to reflect if a storms reach at least TS and HU strength during their life cycles; to reflect HDP and ACE calculations in v1, and to denote extratropical and subtropical storms.
+* Modified TSreach storm attr to remove SS designation as Sub-tropical storms can exceed HU-strength. It now only reflects if a "TS" status exists in the storm's record
+* Added Major HDP to storm and season objects, and stat functions. It's the same as HDP, only reflecting times that a hurricane is at Major (Cat 3,4,5) strength
+* Add notes to readme / Calculation Explanations about how TS calcs include HU strength storms
+
+**Version 1.1 (unreleased)**
+* Fixed formatting on print(guide) command
+* Added readouts to assist user to know what script is formulating at the time
+* Added season object (see documentation for attributes)
+* Modified seasonStats() to reflect addition of season object
+* Fixed note in 'Calculation Explanations' that in seasonStats(), TS and HU quantities were only added if they were thus designated and non-ET at the time; and that all with sub-tropical designation were included in calculation of TS
+* Minor tweaks to output of stormStats()
+
+[&#8679; back to Contents](#contents)
+
+## Contact
 - Questions/Corrections/Issues/Ideas/Explanations/Comments can all be made via my github
 - Kyle S. Gentry, UNCC '17
+
+[&#8679; back to Contents](#contents)
