@@ -117,8 +117,8 @@ This returns the top 15 seasons between 1930 and 1960 with the most and fewest t
 
 #### CSV Output Commands
 
-These commands output spreadsheet-ready CSV files with sortable attributes based on storm, season, or climatological era (10-yr or 30-yr increments). It will generate the same data each time if using the same hurdat2 file. As such, it's here as needed, but really you only need it once.
-* `stormCSV()` - outputs a CSV of individual storms and data collected via the initial script runtime
+These commands output spreadsheet-ready CSV files with sortable attributes based on storm, season, or climatological era (10-yr or 30-yr increments). It will generate the same data each time if using the same hurdat2 file. As such, it's here as needed, but really you only need it once. As you can sort in spreadsheet programs, these can also do ranking, eliminating a lot of the need for the rank functions
+* `stormCSV()` - outputs a CSV of individual storms and data collected via the initial script runtime to compare seasons against one another
 * `seasonCSV()` - like above, but does it for seasons
 * `climoCSV()` - iterates through all seasons and compiles 10-year and 30-year climatologies at 1-year increments, and outputs them to CSV. These then can be loaded into a spreadsheet. This enables, what I term, ***Climatological Tendency*** analysis. You can see how the long-term data has changed over time. I believe it makes it easier to see trends.
 
