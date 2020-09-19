@@ -1,4 +1,4 @@
-# hurdat2parser -- v1.5
+# hurdat2parser -- v1.51
 
 HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The Atlantic is focused here, but the NW Pacific HURDAT could easily be implemented via editing of string in parser file. The record currently goes from 1851 to the last complete season, typically released in May of each year. Storms in the record include subrecords of different entries entailing winds, pressure, and position of the storm's center. This yields a storm-track.
 
@@ -120,7 +120,7 @@ This returns the top 15 seasons between 1930 and 1960 with the most and fewest t
 These commands output spreadsheet-ready CSV files with sortable attributes based on storm, season, or climatological era (10-yr or 30-yr increments). It will generate the same data each time if using the same hurdat2 file. As such, it's here as needed, but really you only need it once. As you can sort in spreadsheet programs, these can also do ranking, eliminating a lot of the need for the rank functions
 * `stormCSV()` - outputs a CSV of individual storms and data collected via the initial script runtime to compare seasons against one another
 * `seasonCSV()` - like above, but does it for seasons
-* `climoCSV()` - iterates through all seasons and compiles 10-year and 30-year climatologies at 1-year increments, and outputs them to CSV. These then can be loaded into a spreadsheet. This enables, what I term, ***Climatological Tendency*** analysis. You can see how the long-term data has changed over time. I believe it makes it easier to see trends.
+* `climoCSV()` - iterates through all seasons and compiles 10-year and 30-year climatologies at 1-year increments, and outputs them to CSV. These then can be loaded into a spreadsheet. This enables, what I term, ***Climatological Tendency*** analysis, essentially a 'running-mean' method. You can see how the long-term data has changed over time. I believe it makes it easier to see trends.
 
 [&#8679; back to Contents](#contents)
 
@@ -259,9 +259,9 @@ season Attributes (all attributes refer to a particular TC season):
 ```
 tracks				--> quantity of tracked systems (int)
 tracksTS			--> quantity of tracked systems that reached TS designation (inclusive of Hurricanes) (int)
-tracksTSstrength	--> quantity of storms that reached TS-strength (inclusive of hurricane strength storms) (int)
+tracksTSstrength	--> quantity of storms that reached TS-strength (inclusive of hurricane strength storms), regardless of status (int)
 tracksHS			--> quantity of tracked systems that reached HU designation (int)
-tracksHSstrength	--> quantity of storms that reached hurricane-strength (int)
+tracksHSstrength	--> quantity of storms that reached hurricane-strength, regardless of status (int)
 tracksMHU 			--> quantity of tracked systems that reached Major Hurricane strength (int)
 MHDP				--> Aggregated Major HDP for the season (float)
 HDP					--> Aggregated HDP for the season (float)
@@ -277,14 +277,14 @@ year				--> TC season (str)
 ## Calculation Explanations
 
 ##### HDP (Hurricane Destruction Potential) 
-- values were calculated via squaring max-sustained winds, then summed if winds were >= 64 knots (Hurricane force). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStorms)
+- values were calculated via squaring max-sustained winds from when the storm was a Hurricane (>= 64kts). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStorms)
 - *Bell, "Climate Assessment for 1999", Bulletin of the American Meteorological Society, p.S19*
 
 ##### ACE (Accumulated Cyclone Energy)
-- values were calculated using similar convention as HDP. Except values where winds were >= 34kts (TS-force) were used. Values are then scaled (except for in rankStorms)
+- values were calculated using similar convention as HDP. Except values from when the storm was a tropical storm (subtropical included) or a Hurricane. Values are then scaled (except for in rankStorms)
 
 ##### MHDP (Major Hurricane Destruction Potential)
-- This parameter has the same convention as HDP, except only values where the storm met or exceeded Category 3 strength (>= 96kts), were used
+- This parameter has the same convention as HDP, except only values where the storm was a Category 3 Hurricane or greater (strength >= 96kts), were used
 
 ##### Saffir-Simpson scale (.ss_scale)
 - values are solely based on max-sustained winds at the time of observation.
@@ -326,6 +326,10 @@ year				--> TC season (str)
 [&#8679; back to Contents](#contents)
 
 ## Changes and Fixes
+
+**Version 1.51**
+* Fixed rankStorms function. It now works properly.
+* Modified ACE (and other energy indices) calculation to exclude the values when extra-tropical.
 
 **Version 1.4**
 * Added CSV Output functions; allowing user to work with the data in a spreadsheet program: `stormCSV()`, `seasonCSV()`, `climoCSV()`

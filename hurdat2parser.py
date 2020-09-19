@@ -74,11 +74,11 @@ class NewTime:
         if self.recidentifier == "L" and int(self.wind) >= 34: storm[len(storm)-1].LTSstrength = True
         if self.recidentifier == "L" and int(self.wind) >= 64: storm[len(storm)-1].LHUstrength = True
         # ------------------------------------------------------------------------------
-        if int(self.wind) >= 34 and self.entryhour in ["0000","0600","1200","1800"]:
+        if int(self.wind) >= 34 and self.status in ("SS","TS","HU") and self.entryhour in ["0000","0600","1200","1800"]:
             storm[len(storm)-1].addACE(int(self.wind)**2)  # Aggregate ACE if wind-speeds are TS-strength or greater
-        if int(self.wind) >= 64 and self.entryhour in ["0000","0600","1200","1800"]:
+        if int(self.wind) >= 64 and self.status == "HU" and self.entryhour in ["0000","0600","1200","1800"]:
             storm[len(storm)-1].addHDP(int(self.wind)**2)  # Aggregate HDP if wind-speeds are HU-strength or greater
-        if int(self.wind) >= 96 and self.entryhour in ["0000","0600","1200","1800"]:
+        if int(self.wind) >= 96 and self.status == "HU" and self.entryhour in ["0000","0600","1200","1800"]:
             storm[len(storm)-1].addMHDP(int(self.wind)**2)  # Aggregate MHDP if wind-speeds are MHU-strength or greater
         if int(self.wind) > storm[len(storm)-1].maxwind:
             storm[len(storm)-1].maxwind = int(self.wind)   # Max Wind Speed
@@ -265,8 +265,9 @@ def rankStorms(tcqty,st_attribute,*args,**kwargs):
                         # tcqty tells us how many to keep in the list
     for x in storm:
         if int(x.atcfid[4:8]) >= year1 and int(x.atcfid[4:8]) <= year2:
-            if st_attribute == "minmslp":
-                if x.minmslp != 9999: validstorms.append(x)
+            
+            if (st_attribute == "minmslp" and x.minmslp != 9999) or st_attribute != "minmslp":
+                validstorms.append(x) if getattr(x,st_attribute) > 0 else None
     if st_attribute == "minmslp":   # If we're dealing with minmslp, don't include reverse (we want lowest to highest)
         if "reverse" in kwargs: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute),reverse=kwargs["reverse"])
         else: rank = sorted(validstorms, key=lambda st: getattr(st,st_attribute))
