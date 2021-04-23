@@ -1,361 +1,192 @@
-# hurdat2parser -- v1.51
+# hurdat2parser -- v2.0.0
+---
+### *An Object-Oriented Approach to Viewing Tropical Cyclone Data*
 
-HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The Atlantic is focused here, but the NW Pacific HURDAT could easily be implemented via editing of string in parser file. The record currently goes from 1851 to the last complete season, typically released in May of each year. Storms in the record include subrecords of different entries entailing winds, pressure, and position of the storm's center. This yields a storm-track.
+HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The two primary HURDAT2 records are for the Atlantic (since 1850) and East/Central-Pacific Oceans (since 1949).
 
-Each storm is treated like its own object. Every time-entry is treated like a sub-object within each storm. This allows easier work with the data. Included is `hurdat_all_05012019.txt` which is the latest (as of release) of the HURDAT2 data. A lot of need to introduce your own scripting is eliminated by the [CSV Output Functions](#csv-output-commands), new in v1.5. Climatological Tendency CSV's are produced so you can see how long-term statistics change incrementally.
+The purpose of this module is to provide a quick way to analyze the HURDAT2 datasets. It includes methods for retrieving, inspecting, ranking, or even exporting data for seasons, individual storms, or climatological eras.
 
-When working with data attributes already in the parser script, you can iterate through each storm via:
-```python
-for x in storm:
-	# place code here
-```
-- storm attributes can be accessed via `x.attributeName` or `getattr(x,"attributeName")`
-
-If you want to iterate through every entry in each storm, simply use the syntax:
-```python
-for x in storm:
-	for y in Entry:
-		# place code here
-```
-- entry attributes can be accessed via `y.attributeName` or `getattr(y,"attributeName")`
-
-- ***!!! WARNING !!! - TS-related tallies, right now, are inclusive of hurricane-strength storms. This might be changed in the future. This is accounted for in ranking and csv functions***
+PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hurdat2parser/)
 
 ## Contents
-* [Console Functions](#included-console-functions)
-  * [Output Examples](#console-function-output-examples)
-* [Storm Attributes Overview](#storm-and-entry-attributes)
-* [Calculation Explanations](#calculation-explanations)
-* [Usage and Attribution](#usage-and-attribution)
+* [Requirements, Installation, and getting the data](#installation)
+* [Importing the module](#importing-the-module)
+* [HURDAT2 Object Structure](#hurdat2-object-structure)
+* [Methods &amp; Attributes](#methods-and-attributes)
+* [Note on Landfall Data](#landfall-data)
 * [Roadmap](#roadmap)
-* [Changes/Fixes](#changes-and-fixes)
-* [Contact for issues and inquiries](#contact)
+* [Credits](#credits)
+* [Copyright/License](#copyright)
 
-## Included Console Functions
+## Installation
 
-#### stormStats()
-```
->>> stormStats(str)
-```
-This function searches the hurdat2 record for matches to the provided string. Its intent is to return individual storm data. It can also be used to return all data from a specific year or name. Even partial name matching is supported.
-
-```
->>> stormStats("AL122005")
-```
-- Using the ATCFID syntax (AL##YYYY), you can return information based on a specific storm in the archive
-
-```
->>> stormStats("2005")
-```
-- Simply using a year (still as a string), you can return all individual storm data from the specified year
-
-```
->>> stormStats("KATRINA")
-```
-- Searching via name will return (if it exists) all storms in the record that were issued that name
-- Searching partials, for example, "Ka", or "Hu" would return all storms in the record with names that start with "KA" or "HU"
-
-#### seasonStats()
-```
->>> seasonStats(int,*int)
-```
-This function collects and reports basic statistics from an entire TC season(s). Simply put a valid search year in the field
-
-```
->>> seasonStats(2005)
-```
-- This will return some stats on TC year, 2005.
-```
->>> seasonStats(2006,2015)
-```
-- This will return combined stats for years within the 2006 and 2015 range
-
-#### rankStorms()
-```
->>> rankStorms(int,str,*int,*int)
-```
-This function directly compares individual storms to one another, returning ranks, including ties.
-- It should be thought of as more of a rank of stats, than of storms, but alas.
-- If not careful, the returned report could be really long. If comparing winds, there are a lot of duplicate entries due to official measurements being in 5kt increments.
-```
->>> rankStorms(10,"minmslp")
-```
-- This would return the storms in the record with the top 10 unique, lowest mslp values
-
-Optional arguments can be placed to window the rank results to certain years
-```
->>> rankStorms(10,"maxwind",2000)
-```
-- This would return the top 10 values of maxwind ONLY from the 2000 season
-```
->>> rankStorms(20,"minmslp",1967,2018)
-```
-- This would return storms with the top 20 values of minimum MSLP within the range of 1967 and 2018
-
-*As of this release, possible attributes available for ranking include: "maxwind", "minmslp", "landfalls", "MHDP", "HDP, or "ACE"*
-
-#### rankSeasons()
-```
->>> rankSeasons(int,str,*int,*int)
-```
-This allows the user to rank based on Seasons in the record. It returns the lowest totals in the record as well. It intakes a quantity (top 5, 10, etc), an attribute, and optionally, a start and end year. Valid attributes as of this release are: `"tracks"`, `"tracksTS"`, `"tracksTSstrength"`, `"tracksHU"`, `"tracksHUstrength"`, `"tracksMHU"`, `"MHDP"`, `"HDP"`, `"ACE"`, `"landfalls"`, `"landfallsTS"`, and `"landfallsHU"`
-
-```
->>> rankSeasons(10,"ACE")
-```
-This would list the top 10 seasons with the highest and lowest Accumulated Cyclone Energy
-
-```
->>> rankSeasons(5,"tracksHUstrength",1967)
-```
-This would return the top 5 seasons between 1967 and the end of the record, with the highest and lowest totals of storms that reached hurricane strength at some point in their life
-
-```
->>> rankSeasons(15,"tracks",1930,1960)
-```
-This returns the top 15 seasons between 1930 and 1960 with the most and fewest tracked-storms
-
-#### CSV Output Commands
-
-These commands output spreadsheet-ready CSV files with sortable attributes based on storm, season, or climatological era (10-yr or 30-yr increments). It will generate the same data each time if using the same hurdat2 file. As such, it's here as needed, but really you only need it once. As you can sort in spreadsheet programs, these can also do ranking, eliminating a lot of the need for the rank functions
-* `stormCSV()` - outputs a CSV of individual storms and data collected via the initial script runtime to compare seasons against one another
-* `seasonCSV()` - like above, but does it for seasons
-* `climoCSV()` - iterates through all seasons and compiles 10-year and 30-year climatologies at 1-year increments, and outputs them to CSV. These then can be loaded into a spreadsheet. This enables, what I term, ***Climatological Tendency*** analysis, essentially a 'running-mean' method. You can see how the long-term data has changed over time. I believe it makes it easier to see trends.
+- At the command prompt, run `pip install hurdat2parser`
+  - When installing, packages `pyshp` and `geojson` will be downloaded as dependencies
+- You'll then need the actual Hurdat2 Data. You can get it [HERE](https://www.nhc.noaa.gov/data/#hurdat). It's a text file. HURDAT2 files for the Atlantic Basin and East/Central Pacific Basins are available and compatible with the package.
 
 [&#8679; back to Contents](#contents)
 
-## Console Function Output Examples
+## Importing the Module
 
-```
->>> stormStats("AL122005")
------------------------
-* ATCF Id: AL122005
-* Name: KATRINA
-* Entries: 34
-* Peak Wind: 77.17 m/s; 150 kts; 172 mph
-* Status at Peak Wind: Major Hurricane
-* Minimum MSLP: 902 mb
-* Major HDP: 13.65 * 10^4 * kt^2
-* HDP: 18.2 * 10^4 * kt^2
-* ACE: 20.01 * 10^4 * kt^2
-* Start Date: 2005-08-23 18Z
-* End Date: 2005-08-31 06Z
-* Storm Track Period: 7 days, 12 hrs
-* Landfall: Yes, 3 Record(s)
-```
+- Import the module and invoke a call to the `Hurdat2` class while passing the file-name of the HURDAT2 dataset
 
+```python
+>>> import hurdat2parser
+>>> atl = hurdat2parser.Hurdat2("path_to_hurdat2.txt")
 ```
->>> seasonStats(2006,2014)
---------------------------------------------------------
-Tropical Cyclone Stats, Between Years 2006-2014
---------------------------------------------------------
-Total Tracks: 139
-Tropical Storms: 68
-Tropical Storm-Strength Storms: 69
-Hurricanes: 59
-Hurricane-Strength Storms: 61
-Major Hurricanes: 24
-Major HDP: 203.8 * 10^4 * kt^2
-HDP: 574.2 * 10^4 * kt^2
-ACE: 987.1 * 10^4 * kt^2
-Total Landfalling Systems: 65
-Tropical Storm-strength Landfalling Systems: 32
-Hurricane-strength Landfalling Systems: 25
---
-```
+- * For the `Hurdat2` object, I highly recommend to use something shortened and readable for the parent object name (like `atl` or `al` for the Atlantic database and `ep`, `cp`, or `pac` for the East/Central Pacific)*
 
-```
->>> rankStorms(10,"minmslp",1967,2018)
-Storms Ranked by minmslp, 1967-2018
-Rank  YEAR  NAME      minmslp
------------------------------------
-   1  2005  WILMA       882
-   2  1988  GILBERT     888
-   3  2005  RITA        895
-   4  1980  ALLEN       899
-   5  1969  CAMILLE     900
-   6  2005  KATRINA     902
-   7  1998  MITCH       905
-      2007  DEAN        905
-   8  2017  MARIA       908
-   9  2004  IVAN        910
-  10  2017  IRMA        914
-```
-
-```
->>> rankSeasons(10,"MHDP",1967)
----------------------------------------
- Major-Hurricane Destruction Potential 
-       Top 10 Seasons, 1967-2018       
----------------------------------------
-       MOST        |       LEAST       
--------------------|-------------------
-  1. 2004  1237425 |  1. 1968  0       
-  2. 2017  1117250 |     1972  0       
-  3. 2005  1035275 |     1986  0       
-  4. 2003  929725  |     1994  0       
-  5. 1999  761625  |     2013  0       
-  6. 1996  646075  |  2. 1973  10000   
-  7. 2010  590675  |     1983  10000   
-  8. 1995  583500  |  3. 2012  20000   
-  9. 2016  564875  |  4. 1987  23125   
- 10. 1989  536175  |  5. 1993  30000   
-                   |  6. 1984  35325   
-                   |  7. 1990  41025   
-                   |  8. 1976  42050   
-                   |  9. 1970  45225   
-                   | 10. 1971  55025 
-```
+After a few seconds you'll be ready to dive into the data! Subsequent examples imply the use of the Atlantic Hurdat2.
 
 [&#8679; back to Contents](#contents)
 
-## Storm and Entry Attributes
-Storm Attributes:
-```
-maxwind			--> Storm's maximum max-sustained winds (int)
-MHDP			--> Storm's Major-Hurricane Destruction Potential
-HDP 			--> Storm's Hurricane Destruction Potential (float)
-ACE				--> Storm's Accumulated Cyclone Energy (float)
-minmslp 		--> Storm's Lowest MSLP entry (int)
-landfalls 		--> Quantity (int) of landfalls in the storm's record
-LTSStrength		--> bool indicating if a landfall was made at TS (or greater) strength
-LHUStrength		--> bool indicating if a landfall was made at hurricane-strength
-TSreach 		--> bool indicating if TC ever reached Tropical Storm (TS) designation
-strengthTSreach	--> bool indicating if TC ever reached TS strength or greater
-HUreach 		--> bool indicating if TC ever reached Hurricane (HU) designation
-strengthHUreach --> bool indicating if TC ever reached Hurricane strength
-MHUreach 		--> bool indicating if TC ever reached Major Hurricane Status
-atcfid 			--> the unique ATCFID of the storm in HURDAT2 (format: "AL##YYYY") (str)
-year 			--> Season (year) that the TC took place in (str)
-name 			--> Given name of the storm (str)
-maxwindstatus	--> Records status of storm during the time of its peak winds (str)
-Entry 			--> list of objects corresponding to specific entries for the storm
-```
+## Hurdat2 Object Structure
 
-per-Entry Attributes:
-```
-entryday 		--> raw string of the observation date in the format YYYYMMDD (str)
-entryhour 		--> raw string of the observation time in UTC (ex. "0600") (str)
-entrytime 		--> Python datetime object of the entry
-recidentifier 	--> Special marker (if any) for the entry (ex. "L"-landfall) (str)
-status			--> TC designation at time of observation (str)
-lat 			--> raw latitude (ex. "25.5N") (str)
-latdec 			--> latitude in decimal form (ex. 25.5) (float)
-lon 			--> raw longitude (ex. "70.2W") (str)
-londec 			--> longitude in decimal form (ex. -70.2) (float)
-wind 			--> max sustained winds at the time of obs (str)
-ss_scale 		--> the Saffir-Simpson equivalent solely based on wind-speed (str)
-
-* The following attributes indicate observed extent of threshold winds at entrytime
-* Cardinal direction abbreviations are used
-tsNE	tsSE	tsSW	tsNW 	--> Radii of tropical-storm force winds (str)
-ts50NE	ts50SE	ts50SW	ts50NW	--> Radii of strong (50kt) tropical-storm force winds (str)
-huNE	huSE	huSW	huNW	--> Radii of hurricane-strength winds (str)
-```
-- Yes, all that data is held in or derived from HURDAT2!
-- Not all data attributes are defined for all storms, especially older storms
-
-season Attributes (all attributes refer to a particular TC season):
-```
-tracks				--> quantity of tracked systems (int)
-tracksTS			--> quantity of tracked systems that reached TS designation (inclusive of Hurricanes) (int)
-tracksTSstrength	--> quantity of storms that reached TS-strength (inclusive of hurricane strength storms), regardless of status (int)
-tracksHS			--> quantity of tracked systems that reached HU designation (int)
-tracksHSstrength	--> quantity of storms that reached hurricane-strength, regardless of status (int)
-tracksMHU 			--> quantity of tracked systems that reached Major Hurricane strength (int)
-MHDP				--> Aggregated Major HDP for the season (float)
-HDP					--> Aggregated HDP for the season (float)
-ACE					--> Aggregated ACE for the season (float)
-landfalls			--> tallied storms that have at least 1 landfall on record (int)
-landfallsTS			--> tallied storms that have at least 1 landfall at least at TS-strength (inclusive of hurricane-strength landfalls) (int)
-landfallsHU			--> tallied storms that have at least 1 landfall at hurricane strength (int)
-year				--> TC season (str)
-```
+- The structure of a `Hurdat2` object is hierarchal. It has two primary dictionaries:
+  - `<Hurdat2>.tc` - A dictionary containing all `TropicalCyclone` objects compiled from the record.
+    - Individual storms can be accessed using their ATCF ID, a unique 8-character id for each tropical cyclone <u>OR</u> a name of a storm.
+	  - `atl["AL200512"]` - Call for Hurricane Katrina's Data using its ATCFID (it being the 12th storm from the 2005 Atlantic Season).
+	  - `atl["Name"]` - Use this if you know the name, but the year is unknown. A partial search is okay, but may receive less accurate results. It uses the `difflib` package to calculate close matches and outputs a list (if applicable) that you then can select from.
+  - `<Hurdat2>.season` - A dictionary holding `Season` objects (yearly data).
+    - A Season's data is accessed via a simple year key of type `int`.
+	  - `atl[1995]` retrieves the object associated with the 1995 hurricane season.
+- `Season` objects also have a dictionary (`<Season>.tc`) that holds `TropicalCyclone` objects, specific to the year.
+  - There are 4 different ways to access individual storm data:
+    1. `atl[1995]["Opal"]` - Storm Name; Useful if you know the name a storm was issued and the season in which it occurred.
+    2. `atl[1992]["A"]` - Storm Name first-letter; I'm not saying you'd forget a named-storm like Hurricane Andrew, but this capability would grab the storm whose first-letter matched the one passed. This primarily works for modern storms (since the beginning of the satellite era), as most in the past were not named. In the HURDAT2 record, storms that were never issued a name are given "UNNAMED" for that field.
+    3. TC Number: `atl[1988][8]` - Use the storm number (type `int`) from the season. This is defined by using the ATCF ID.
+    4. ATCF ID: `atl[1980]["AL041980"]` - This isn't recommended because of redundancy (it can be done without the initial call to the `1980` object).
+- `TropicalCyclone` objects contain a `list` of `TCRecordEntry` objects in time-ascending order.
+  - Though the user probably wouldn't have general/typical need to access `TCRecordEntry`-level data, it can be done via the desired index from the `<TropicalCyclone>.entry` list: `atl[2004]["ivan"][0]` - This would grab the first entry associated with the track of Hurricane Ivan.
 
 [&#8679; back to Contents](#contents)
 
-## Calculation Explanations
+## Methods and Attributes
 
-##### HDP (Hurricane Destruction Potential) 
-- values were calculated via squaring max-sustained winds from when the storm was a Hurricane (>= 64kts). Furthermore, they were only summed if the observation time was 0Z, 6Z, 12Z, or 18Z. This is because each storm should have data entries at these specific times for its life (official report times). It is also to avoid inclusion of special entries, such as landfalls. This is to keep a more objective standard of space of time. According to Bell, the ACE method was an off-shoot of HDP, with the technique being adopted from William M. Gray and colleagues. Values are then scaled (except for in rankStorms)
-- *Bell, "Climate Assessment for 1999", Bulletin of the American Meteorological Society, p.S19*
+Now that you know how to call a particular object of interest, you can now access its data, using methods and attributes. The docstrings (accessed via `help()`) are quite detailed and methods that take arguments have example calls listed. But here is a quick reference to what is available, along with some shortcuts and example calls to assist navigating while in this document.
 
-##### ACE (Accumulated Cyclone Energy)
-- values were calculated using similar convention as HDP. Except values from when the storm was a tropical storm (subtropical included) or a Hurricane. Values are then scaled (except for in rankStorms)
+- [`Hurdat2` Methods &amp; Attributes](#hurdat2-methods-and-attributes)
+- [`Season` and `TropicalCyclone` Shared Methods &amp; Attributes](#shared-methods-and-attributes-for-season-and-tropicalcyclone)
+- [`Season`-only Methods &amp; Attributes](#season-only-methods-and-attributes)
+- [`TropicalCyclone`-only Methods &amp; Attributes](#tropicalcyclone-only-methods-and-attributes)
+- [`TCRecordEntry` Attributes](#tcrecordentry-attributes)
 
-##### MHDP (Major Hurricane Destruction Potential)
-- This parameter has the same convention as HDP, except only values where the storm was a Category 3 Hurricane or greater (strength >= 96kts), were used
+#### `Hurdat2` Methods and Attributes
 
-##### Saffir-Simpson scale (.ss_scale)
-- values are solely based on max-sustained winds at the time of observation.
-	-	Missing wind data returns a "-1"
-	-	TS strength returns "0"
+Attributes | Description | Examples
+:---: | :---: | :---:
+`rank_seasons(...)` | Print a report that lists a ranking of seasons based on an inquired attribute. Other details are included in the report as well, but they'll be ordered according to the attribute passed. Though not all attributes are represented in the printed report, the ordering will be correct based on the inquired attribute. It also takes positional keyword arguments for `year1=None` and `year2=None`, allowing optional ranking to limit the scope of the report to a range of years (this also applies to subsequent ranking methods). | `atl.rank_seasons(5, "track_distance_TS", 1971, 2000, True)`
+`rank_seasons_thru(...)` | Print a ranking of seasons where you can use part of the season; a way to rank attributes up to or between certain dates. A special positional keyword argument `thru=[12, 31]`, a tuple that represents the end month and day (ex. \[9, 6\] for September 6), must be passed. An <u>optional</u> keyword argument `start` can be included as well. If both are excluded from the call, by default this just becomes a wrapper for the above method. | `atl.rank_seasons_thru(10,"TSreach",[9,15],1967)`
+`rank_climo(...)` | Yet another useful ranking method. This allows one to rank attributes assessed over several to many years (climatological periods) to one another. Optional keyword argument `climatology` (default is 30 years) controls the span of time that data is collected and `increment` (default is 5 years) dictates the temporal distance between periods | `atl.rank_climo(20,"track_distance_TC", climatology=10, increment=1)`
+`rank_storms(...)` | Print a report that compares storms and their attributes to each other. Similar to the above methods, other data is included in the report. | `atl.rank_storms(20,"HDP",1967)`
+`multi_season_info(...)` | Prints a report a gathered statistics based on a range of years. This is similar to the `info()` methods referenced in the next section. This could be thought of as an info method for a climatological period | `atl.multi_season_info(1991, 2000)`<br />`atl[2010, 2019]`
+`storm_name_search(...)` | Search through the entire HURDAT2 record for storms issued a name. If the positional keyword `info` is `True`, the matching storm's info method will print. | `atl.storm_name_search("Hugo")`
+`output_climo(...)` | outputs a .csv file using the `csv` package of 1-year incremented climatological periods. This csv file can then be opened in a spreadsheet program. To compare or rank, the spreadsheet GUI layout is much easier to use especially due to instant sorting and filtering. This accepts a positional keyword argument (`climatology=30`). | `atl.output_climo(15)`
+`output_seasons_csv(...)` | Similar to the above, but for seasons. It takes no arguments. In other words, it would be redundant to run it multiple times, because as the `hurdat2parser` package doesn't natively allow modification of the data, it would just output the same data over and over. The only exception would be when the HURDAT2 database is updated by the NHC. With this in mind, it will automatically write-over the csv if it already exists (file-name is auto-generated within the method). | `atl.output_seasons_csv()`
+`output_storms_csv(...)` | Similar to above, but for individual storms. | `atl.output_storms_csv()`
+`coord_contains(...)` | Takes 3 tupled lat-lon coordinates. The purpose is to inquire whether the first arg (the test coordinate) is contained within a bounding box formed by the other two coordinates passed (returns a `bool`. This is generally just accessed via the ranking methods | `atl.coord_contains(`<br />&nbsp;&nbsp;&nbsp;&nbsp;`[30.4,-85.0]`,<br />&nbsp;&nbsp;&nbsp;&nbsp;`[31.5, 86.0],`<br />&nbsp;&nbsp;&nbsp;&nbsp;`[29.0, 84.0]`<br />`) -> True`
+`record_range()` | Returns a tuple of the beginning year and end year of the HURDAT2 record | `atl.record_range() -> (1851, 2019)`
 
-##### seasonStats()
-- Hurricane quantities are exclusive of tropical storm quantities, but are inclusive of Major Hurricane quantities
-- Seasonal Landfalls are irrespective to geographic locale. Maybe in a future release, US landfalls can be decifered from the data (feel free to work on your own)
-- Seasonal landfall quantities are irrespective to the quantity of landfalls a single storm makes. So storms only contribute a max of 1 to the seasonal landfall total
+[&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
 
-##### storm and season objects
-- CAREFUL! In almost all cases, TS tallies are **inclusive** of hurricane strength storms. But in the `seasonStats()` function, and as noted, they are reported as exlcusive amounts
+#### Shared Methods and Attributes for `Season` and `TropicalCyclone`
 
+Attributes | Description | Examples
+:---: | :---: | :---:
+`output_shp()` | Generate a GIS-compatible Shapefile using the `shapefile` package | `atl[1988]["Gilbert"].output_shp()`
+`output_geojson()` | Generate a GIS-compatible and text-readable `.geojson` file via the `geojson` package; can also be used in GIS applications | `atl[2000].output_geojson()`
+`info()` | Prints basic stats | `atl[2005].info()`
+`summary()` | Prints detailed statistics for the season or life of the TC | `atl[2019]["dorian"].summary()`
+`landfalls`<br /> | \*SEE [DISCLAIMER FOR LANDFALL INFO](#landfall-data)\* Sum of all landfalls (remember, a storm can make multiple landfalls). `<Season>.landfalls` is also an unfiltered aggregate of its storms landfalls. At the seasonal level, you'd probably be more interested in the attribute `landfall_TC` (see following section) | `atl[1960]["doNnA"].landfalls`
+`landfall_<STATUS>`<br />*\-can be TC, TD, TS, HU, or MHU* | `Season`: qty of TC's that made landfall as the inquired status; `TropicalCyclone`: `bool` indicating if the storm made landfall while the inquired status<br />*\-CAUTION: These attrs are exclusive of landfalls made while of stronger designation\-* | `atl[1996].landfall_TS -> 2`<br />`atl[2011]["I"].landfall_HU -> True`
+`<STATUS>reach`<br />*\-can be TC, TD, TS, HU, or MHU* | `Season`: qty of TC's that reached <u>at least</u> the inquired status; `TropicalCyclone`: `bool` indicating if the storm ever was designated as the inquired status | `atl[2010].HUreach -> 12`<br />`atl[1991]["danny"].HUreach -> False`
+`ACE`, `HDP`, or `MHDP` | Returns the specified Energy Index reading associated with the season or storm. Note that the MHDP is one you likely won't see elsewhere. It's formula is the same as ACE and HDP but for major-hurricanes only | `atl[1966].HDP`
+`track_distance` | The calculated distance (in nmi) for the entire track of the storm (or aggregate of the season), regardless of status | `atl[1954]["hazel"].track_distance`
+`track_distance_<STATUS>`<br>*\-can be TC, TD, TS, HU, or MHU* | The distance traversed while storm(s) was(were) <u>at least</u> the status designation | `atl[1961].track_distance_MHU`
+
+[&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
+
+#### `Season` Only Methods and Attributes
+Attribute | Description | Example
+:---: | :---: | :---:
+`output_shp_segmented()` | Generates a shapefile including each segment from each tropical-cyclone from a given season; each individual segment from each individual storm will be represented | `atl[1932].output_shp_segmented()`
+`output_geojson_segmented()` | Generates a geojson including each segment from each tropical-cyclone from a given season; each individual segment from each individual storm will be representeds | `atl[2003].output_geojson_segmented()`
+`tracks` | Returns the quantity of tropical cyclones from a season | `atl[1995].tracks`
+`<STATUS>only`<br />*\-can be TD, TS, or HU* | Returns the quantity of TC's from a season that made were given the inquired designation, but never strengthened beyond it. `HUonly` implies Category 1 and 2 storms only. To inquire about `MHU`, use the `MHUreach` attr | `atl[1950].TDonly`<br />`atl[2017].HUonly`
+
+[&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
+
+#### `TropicalCyclone` Only Methods and Attributes
+| Attribute | Description | Example
+:---: | :---: | :---:
+`coord_list()` | Prints a report with entry dates and the associated Latitude and Longitude | `atl[2005]["rita"].coord_list()`
+`gps` | Returns a `list` of tupled latitude and Longitude coordinates | `atl[1998]["MITCH"].coord_list()`
+`minmslp` | Returns the lowest recorded pressure of the TC | `atl[1955][10].minmslp`
+`<EI>_per_nmi`<br />*\-can be ACE, HDP, or MHDP* | Returns the inquired energy index divided by the track distance covered while the energy index was being contributed to (`ACE` &rarr; `track_distance_TS` or `HDP` &rarr; `track_distance_HU` as examples). WARNING! These attributes do not have any kind of threshold controls, so storms which were short-lived can have high values | `atl[1964][10].HDP_per_nmi`<br />`atl[2016]["matthew"].ACE_per_nmi`
+`<EI>_perc_ACE` &rarr; *\-can be HDP or MHDP*<br />`HDP_perc_MHDP` | Simply the storm's HDP or MHDP divided by ACE or the MHDP divided by the HDP. Look at this as the <u>percentage</u> (as a float between 0 and 1) of the storm's ACE or HDP that was contributed to while a Hurricane or Major Hurricane, respectively | `atl[2017]["IRMA"].HDP_perc_ACE`
+`track_<EI1>_perc_<EI2>`<br />*\-&lt;EI1&gt; can be TS, HU, or MHU*<br />*\-&lt;EI2&gt; can be TC, TS, HU, or MHU* | Returns the the storm's &lt;EI2&gt; track_distance divided by the track distance while of status &lt;EI1&gt;. &lt;EI1&gt; must be of higher hierarchal status than &lt;EI2&gt; | `atl[2005][25].track_HU_perc_TC`<br />`atl[2003]["Fabian"].track_MHU_perc_TS`
+
+[&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
+
+#### `TCRecordEntry` Attributes
+
+- As mentioned earlier, there's generally no need to access`TCRecordEntry` objects directly. Only the most-common attributes will be referenced in this document. A comprehensive list is available via `help`
+
+| Attribute | Description
+:---: | :---:
+`entrytime` | A `datetime.datetime` object of the entry's timestamp
+`status` | The designated 2-letter abbreviation representing the storm's status
+`location`<br />`location_rev` | A tuple of the latitude/longitude coordinates; `location_rev` is reversed in order, a longitude/latitude tuple; seemingly favored for GIS use.
+`wind` | The maximum-sustained winds at the time of entry-recording
+`mslp` | The Mean Sea-Level Pressure (in hPa or mb) at the time of entry-recording
+`dump_hurdat2()` | Returns a reassembled Hurdat2-formatted string, identical to the one parsed to create the entry
+
+[&#8679; back to Methods &amp; Attributes](#methods-and-attributes)<br />
 [&#8679; back to Contents](#contents)
 
-## Usage and Attribution
-- License is GNUv3. If you'd like, let me know how you used it in a project/research you're doing.
+## Landfall Data
+
+An important point to keep in mind when viewing data and ranking, HURDAT2's landfall data is incomplete. It is progressively being updated in conjunction with the yearly release of the dataset. Please see the documentation  [HURDAT2 Format Guide](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-nov2019.pdf) for more detail on currently-available landfall data temporal scope.
 
 [&#8679; back to Contents](#contents)
 
 ## Roadmap
 
-##### Function Tweaking
-- Add Saffir-Simpson scale duration
-- Allow `stormStats()` function to accept an integer year
-
-##### GIS Function
-- Text-delimited format for import in GIS programs
-- Inclusion of ID's and lat/long points; and other attributes
-- KML output for Google Earth or other GIS viewing
-
-##### Various
-- Change TS-related tallies, within storm and season objects, to be exclusive of hurricanes or hurricane-strength storms
-- Comment script better to match extent of readme
-- Place instructions in readme of how to use the `season` object list.
-- investigate seasonal landfall totals. It's possible for storms to make 1 landfall at TS strength, and another at hurricane strength. Currently, TS-strength landfalls are assumed inclusive of HU-strength landfalls. Although likely minor in effect, the aformentioned intention to change TS tallies to be exclusive is more likely to be undertaken
+- [ ] Inclusion of `matplotlib` methods
+- [ ] View track methods
+- [ ] POSSIBLY will include ranking in info methods
 
 [&#8679; back to Contents](#contents)
 
-## Changes and Fixes
+## Credits
 
-**Version 1.51**
-* Fixed rankStorms function. It now works properly.
-* Modified ACE (and other energy indices) calculation to exclude the values when extra-tropical.
-
-**Version 1.4**
-* Added CSV Output functions; allowing user to work with the data in a spreadsheet program: `stormCSV()`, `seasonCSV()`, `climoCSV()`
-* Added `rankSeasons()` function, allowing to see the rankings of seasons based on an attribute and optional time-frame
-* `rankStats()` is now `rankStorms()`
-* Removed `hurdat2custom.py` from repository. CSV output functions eliminate most of its use
-
-**Version 1.2**
-* Added Landfalls at TS-strength to storm objects and season objects and seasonStats()
-* Added storm and season objects to reflect if a storms reach at least TS and HU strength during their life cycles; to reflect HDP and ACE calculations in v1, and to denote extratropical and subtropical storms.
-* Modified TSreach storm attr to remove SS designation as Sub-tropical storms can exceed HU-strength. It now only reflects if a "TS" status exists in the storm's record
-* Added Major HDP to storm and season objects, and stat functions. It's the same as HDP, only reflecting times that a hurricane is at Major (Cat 3,4,5) strength
-* Add notes to readme / Calculation Explanations about how TS calcs include HU strength storms
-
-**Version 1.1 (unreleased)**
-* Fixed formatting on print(guide) command
-* Added readouts to assist user to know what script is formulating at the time
-* Added season object (see documentation for attributes)
-* Modified seasonStats() to reflect addition of season object
-* Fixed note in 'Calculation Explanations' that in seasonStats(), TS and HU quantities were only added if they were thus designated and non-ET at the time; and that all with sub-tropical designation were included in calculation of TS
-* Minor tweaks to output of stormStats()
+- [Haversine Formula (via Wikipedia)](https://en.wikipedia.org/wiki/Haversine_formula)
+- Bell, et. al. Climate Assessment for 1999. *Bulletin of the American Meteorological Society.* Vol 81, No. 6. June 2000. S19.
+- <span>G. Bell, M. Chelliah.</span> *Journal of Climate.* Vol. 19, Issue 4. pg 593. 15 February 2006.
+- [HURDAT2 Format Guide](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-nov2019.pdf)
 
 [&#8679; back to Contents](#contents)
 
-## Contact
-- Questions/Corrections/Issues/Ideas/Explanations/Comments can all be made via my github
-- Kyle S. Gentry, UNCC '17
+## Copyright
+
+**Author**: Kyle S. Gentry<br />
+Copyright &copy; 2019-2021, Kyle Gentry (KyleSGentry@outlook.com)<br />
+**License**: MIT<br />
+**GitHub**: [https://github.com/ksgwxfan/hurdat2parser](https://github.com/ksgwxfan/hurdat2parser)<br />
+**Author's Webpages**:
+ - [https://ksgwxfan.github.io/](https://ksgwxfan.github.io/)<br />
+ - [http://echotops.blogspot.com/](http://echotops.blogspot.com/)
 
 [&#8679; back to Contents](#contents)
+
+
+
+
+
+
+
+
+
+
+
+
