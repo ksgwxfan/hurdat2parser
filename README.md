@@ -160,6 +160,7 @@ An important point to keep in mind when viewing data and ranking, HURDAT2's land
 
 ## Credits
 
+- HURDAT Reference: `Landsea, C. W. and J. L. Franklin, 2013: Atlantic Hurricane Database Uncertainty and Presentation of a New Database Format. Mon. Wea. Rev., 141, 3576-3592.`
 - [Haversine Formula (via Wikipedia)](https://en.wikipedia.org/wiki/Haversine_formula)
 - Bell, et. al. Climate Assessment for 1999. *Bulletin of the American Meteorological Society.* Vol 81, No. 6. June 2000. S19.
 - <span>G. Bell, M. Chelliah.</span> *Journal of Climate.* Vol. 19, Issue 4. pg 593. 15 February 2006.
