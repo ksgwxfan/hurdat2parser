@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setup(
     name = 'hurdat2parser',
-    version = '2.0.0',
+    version = '2.0.1',
     author = 'Kyle S. Gentry',
     author_email = 'KyleSGentry@outlook.com',
     url = 'http://github.com/ksgwxfan/hurdat2parser',

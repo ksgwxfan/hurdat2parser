@@ -1,4 +1,4 @@
-# hurdat2parser -- v2.0.0
+# hurdat2parser -- v2.0.1
 ---
 ### *An Object-Oriented Approach to Viewing Tropical Cyclone Data*
 
@@ -16,6 +16,7 @@ PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hu
 * [Note on Landfall Data](#landfall-data)
 * [Roadmap](#roadmap)
 * [Credits](#credits)
+* [Fixes](#fixes-log)
 * [Copyright/License](#copyright)
 
 ## Installation
@@ -165,6 +166,12 @@ An important point to keep in mind when viewing data and ranking, HURDAT2's land
 - Bell, et. al. Climate Assessment for 1999. *Bulletin of the American Meteorological Society.* Vol 81, No. 6. June 2000. S19.
 - <span>G. Bell, M. Chelliah.</span> *Journal of Climate.* Vol. 19, Issue 4. pg 593. 15 February 2006.
 - [HURDAT2 Format Guide](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-nov2019.pdf)
+
+[&#8679; back to Contents](#contents)
+
+## Fixes Log
+
+- `v2.0.1`: fixed a method call-related error within `rank_seasons_thru`. So it works nice now.
 
 [&#8679; back to Contents](#contents)
 

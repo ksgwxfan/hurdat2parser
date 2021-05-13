@@ -1,4 +1,4 @@
-"""hurdat2parser v2.0
+"""hurdat2parser v2.0.1
 
 https://github.com/ksgwxfan/hurdat2parser
 
@@ -17,10 +17,13 @@ To get started:
     >>> import hurdat2parser
     >>> atl = hurdat2parser.Hurdat2("path_to_hurdat2.txt")
 
-hurdat2parser, Copyright (c) 2021, Kyle Gentry (KyleSGentry@outlook.com)
+hurdat2parser, Copyright (c) 2019-2021, Kyle Gentry (KyleSGentry@outlook.com)
 License: MIT
 ksgwxfan.github.io
 echotops.blogspot.com
+
+Fixes in 2.0.1:
+    - fixed error preventing rank_seasons_thru from working
 
 """
 
@@ -374,11 +377,11 @@ class Hurdat2:
                 # STILL NEED TO ACCOUNT FOR TRACK_DISTANCE AND DATE RANGE
                 entry_trk = [trk for trk in tc.entry if start <= trk.month_day_tuple <= thru]
                 for trk in range(1,len(entry_trk)):
-                    rseason[yr]["track_distance"] += hurdat2parser.tc.haversine(entry_trk[trk-1].location, entry_trk[trk].location)
-                    rseason[yr]["track_distance_TC"] += hurdat2parser.tc.haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status in ("SD","TD","SS","TS","HU") else 0
-                    rseason[yr]["track_distance_TS"] += hurdat2parser.tc.haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status in ("SS","TS","HU") else 0
-                    rseason[yr]["track_distance_HU"] += hurdat2parser.tc.haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status == "HU" else 0
-                    rseason[yr]["track_distance_MHU"] += hurdat2parser.tc.haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status == "HU" and entry_trk[trk-1].wind >= 96 else 0
+                    rseason[yr]["track_distance"] += haversine(entry_trk[trk-1].location, entry_trk[trk].location)
+                    rseason[yr]["track_distance_TC"] += haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status in ("SD","TD","SS","TS","HU") else 0
+                    rseason[yr]["track_distance_TS"] += haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status in ("SS","TS","HU") else 0
+                    rseason[yr]["track_distance_HU"] += haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status == "HU" else 0
+                    rseason[yr]["track_distance_MHU"] += haversine(entry_trk[trk-1].location, entry_trk[trk].location) if entry_trk[trk-1].status == "HU" and entry_trk[trk-1].wind >= 96 else 0
                 for en in tc.entry:
                     if start <= en.month_day_tuple <= thru:
                         rseason[yr]["ACE"] += math.pow(en.wind,2) if en.wind >= 34 and en.status in ("SS","TS","HU") and en.entryhour in [0,6,12,18] and en.entryminute == 0 else 0
