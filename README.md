@@ -54,7 +54,7 @@ PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hu
 ## Installation
 
 - At the command prompt, run `pip install hurdat2parser`
-  - When installing, packages `pyshp` and `geojson` will be downloaded as dependencies
+  - When installing, packages `pyshp` and `geojson` and `matplotlib` will be downloaded as dependencies (if necessary).
 - You'll then need the actual Hurdat2 Data. You can get it [HERE](https://www.nhc.noaa.gov/data/#hurdat). It's a text file. HURDAT2 files for the Atlantic Basin and East/Central Pacific Basins are available and compatible with the package.
 
 [&#8679; back to Contents](#contents)
