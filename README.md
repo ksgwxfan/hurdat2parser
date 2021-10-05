@@ -84,18 +84,17 @@ After a few seconds you'll be ready to dive into the data! Subsequent examples i
   - `<Hurdat2>.season` - A dictionary holding `Season` objects (yearly data).
     - A Season's data is accessed via a simple year key of type `int`.
 	  - `atl[1995]` retrieves the object associated with the 1995 hurricane season.
-	- A Storm's data can also be accessed from this level (quicker than outlined in next section):
-	  - `atl[2005, 12]` - retrieves Hurricane Katrina
-	- A specific `TCRecordEntry` can be retreived too:
-	  - `atl[2005, 12, 21]` - the 22nd entry of Hurricane Katrina
 - `Season` objects also have a dictionary (`<Season>.tc`) that holds `TropicalCyclone` objects, specific to the year.
   - There are 4 different ways to access individual storm data:
     1. `atl[1995]["Opal"]` - Storm Name; Useful if you know the name a storm was issued and the season in which it occurred.
     2. `atl[1992]["A"]` - Storm Name first-letter; I'm not saying you'd forget a named-storm like Hurricane Andrew, but this capability would grab the storm whose first-letter matched the one passed. This primarily works for modern storms (since the beginning of the satellite era), as most in the past were not named. In the HURDAT2 record, storms that were never issued a name are given "UNNAMED" for that field.
     3. TC Number: `atl[1988][8]` - Use the storm number (type `int`) from the season. This is defined by using the ATCF ID.
+	  - This would be faster (less keystrokes): `atl[2005, 12]` - retrieves Hurricane Katrina
     4. ATCF ID: `atl[1980]["AL041980"]` - This isn't recommended because of redundancy (it can be done without the initial call to the `1980` object).
 - `TropicalCyclone` objects contain a `list` of `TCRecordEntry` objects in time-ascending order.
-  - Though the user probably wouldn't have general/typical need to access `TCRecordEntry`-level data, it can be done via the desired index from the `<TropicalCyclone>.entry` list: `atl[2004]["ivan"][0]` - This would grab the first entry associated with the track of Hurricane Ivan.
+  - Though the user probably wouldn't have general/typical need to access `TCRecordEntry`-level data, it can be done via the desired index from the `<TropicalCyclone>.entry` list:
+    - `atl[2004]["ivan"][0]` - This would grab the first entry associated with the track of Hurricane Ivan.
+    - This would be faster: `atl[2005, 12, 21]` - the 22nd entry of Hurricane Katrina
 
 [&#8679; back to Contents](#contents)
 
