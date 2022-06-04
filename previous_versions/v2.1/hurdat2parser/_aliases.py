@@ -204,10 +204,6 @@ class TCEntryAliases:
     def huNW(self):
         return self._huNW
 
-    @property
-    def wind_radii(self):
-        return self._wind_radii
-
 
 
 

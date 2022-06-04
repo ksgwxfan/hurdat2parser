@@ -1,4 +1,4 @@
-"""hurdat2parser v2.11
+"""hurdat2parser v2.1
 
 https://github.com/ksgwxfan/hurdat2parser
 
@@ -17,7 +17,7 @@ To get started:
     >>> import hurdat2parser
     >>> atl = hurdat2parser.Hurdat2("path_to_hurdat2.txt")
 
-hurdat2parser, Copyright (c) 2019-2022, Kyle Gentry (KyleSGentry@outlook.com)
+hurdat2parser, Copyright (c) 2019-2021, Kyle Gentry (KyleSGentry@outlook.com)
 License: MIT
 ksgwxfan.github.io
 echotops.blogspot.com
@@ -34,24 +34,6 @@ import collections
 from . import _aliases, _calculations, _reports
 
 class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _reports.Hurdat2Reports):
-
-    BASIN_DICT = dict(
-            AL = "North Atlantic",
-            NA = "North Atlantic",
-            SL = "South Atlantic",
-            SA = "South Atlantic",
-            EP = "East Pacific",
-            CP = "Central Pacific",
-            WP = "West Pacific",
-            SH = "Southern Hemisphere",
-            IO = "North Indian",
-            NI = "North Indian",
-            SI = "South Indian",
-            SP = "South Pacific",
-            AS = "Arabian Sea",
-            BB = "Bay of Bengal",
-        )
-
     def __init__(self, hurdat2file):
         """Initializes a new Hurdat2 object.
         
@@ -68,7 +50,7 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
     def __repr__(self):
         return "<{} object - {}: {}-{} - at 0x{}>".format(
             re.search(r"'(.*)'", str(type(self)))[1],
-            self.basin(),
+            self.basin,
             *self.record_range,
             str(id(self)).upper().zfill(16)
         )
@@ -79,7 +61,7 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
 
     def __str__(self):
         return "{}, {}".format(
-            self.basin(),
+            self.basin,
             "{}-{}".format(*self.record_range)
         )
 
@@ -478,16 +460,28 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
         else:
             return False
 
-    def basin(self, season_obj=None):
-
-        basin_id = list(set([
-            tc.atcfid[:2] for tc in (self.tc.values() if season_obj is None else season_obj.tc.values())
-        ]))
+    @property
+    def basin(self):
+        basin_dict = dict(
+            AL = "North Atlantic",
+            NA = "North Atlantic",
+            SL = "South Atlantic",
+            SA = "South Atlantic",
+            EP = "East Pacific",
+            CP = "Central Pacific",
+            WP = "West Pacific",
+            SH = "Southern Hemisphere",
+            IO = "North Indian",
+            NI = "North Indian",
+            SI = "South Indian",
+            SP = "South Pacific",
+            AS = "Arabian Sea",
+            BB = "Bay of Bengal",
+        )
+        basin_id = list(set([tc.atcfid[:2] for tc in self.tc.values()]))
         basin_names = []
         try:
-            basin_names = list(set([
-                self.BASIN_DICT[basin] for basin in basin_id
-            ]))
+            basin_names = list(set([basin_dict[basin] for basin in basin_id]))
         except:
             pass
         # print(basin_id)
@@ -515,7 +509,7 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
         return "<{} object - {} - {} - at 0x{}>".format(
             re.search(r"'(.*)'", str(type(self)))[1],
             self.year,
-            self._hd2.basin(self),
+            self._hd2.basin,
             str(id(self)).upper().zfill(16)
         )
 
@@ -526,18 +520,11 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
     def __getitem__(self, s):
         # Storm Number passed
         if type(s) == int:
-            for atcfid, tc in self.tc.items():
-                if re.search(
-                    r"[A-Z][A-Z]{:0>2}\d\d\d\d".format(s),
-                    atcfid
-                ):
-                    return tc
-                
-            # return self.tc[
-                # list(self.tc.keys())[
-                    # (s-1) if s > 0 else s
-                # ]
-            # ]
+            return self.tc[
+                list(self.tc.keys())[
+                    (s-1) if s > 0 else s
+                ]
+            ]
         # List/Tuple (storm number, tcrecord index)
         elif type(s) in [tuple, list]:
             if len(s) == 1:
@@ -611,6 +598,43 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
             descending=kw.get("descending", True)
         )
 
+    def info(self):
+        """Returns a basic report of accumulated information from all storms
+        specific to the tropical cyclone season.
+        """
+        print("")
+        print("{:-^40}".format(""))
+        print("{:^40}".format("Tropical Cyclone Stats for {}".format(self.year)))
+        print("{:^40}".format(
+            "Atlantic Basin" if list(self.tc.keys())[0][0] == "A" else "East/Central Pacific Basin"
+        ))
+        print("")
+        print("{:^40}".format(
+            "* TS-related Statistics include"
+        ))
+        print("{:^40}".format(
+            "Hurricanes in their totals"
+        ))
+        print("{:^40}".format(
+            "except for landfall data"
+        ))
+        print("{:-^40}".format(""))
+        print("* Tracked Systems: {}".format(len(self)))
+        print("* TC Track Distance: {:.1f} nmi".format(self.track_distance_TC))
+        print("  -- TS Distance: {:.1f} nmi".format(self.track_distance_TS))
+        print("  -- HU Distance: {:.1f} nmi".format(self.track_distance_HU))
+        print("  -- MHU Distance: {:.1f} nmi".format(self.track_distance_MHU))
+        print("* Tropical Storms: {}".format(self.TSreach))
+        print("* ACE: {:.3f} * 10^4 kt^2".format(self.ACE * math.pow(10,-4))) if self.ACE > 0 else None
+        print("* Hurricanes: {}".format(self.HUreach))
+        print("* HDP: {:.3f} * 10^4 kt^2".format(self.HDP * math.pow(10,-4))) if self.HDP > 0 else None
+        print("* Major Hurricanes: {}".format(self.MHUreach))
+        print("* MHDP: {:.3f} * 10^4 kt^2".format(self.MHDP * math.pow(10,-4))) if self.MHDP > 0 else None
+        print("* Total Landfalling TC's: {}".format(self.landfall_TC))
+        print("  -- TS Landfalls: {}".format(self.landfall_TS))
+        print("  -- HU Landfalls: {}".format(self.landfall_HU))
+        print("")
+
     def summary(self):
         """Returns a report detailing all individual systems/storms tracked
         during a particular season.
@@ -621,7 +645,9 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
             "Tropical Cyclone Summary for {}".format(self.year)
         ))
         try:
-            print("{:^67}".format(self._hd2.basin(self)))
+            print("{:^67}".format(
+                "Atlantic Basin" if list(self.tc.keys())[0][0] == "A" else "East/Central Pacific Basin"
+            ))
         except:
             pass
         print("{:-^67}".format(""))
@@ -833,9 +859,6 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
                 trk.location[0],
                 trk.location[1]
             ))
-
-    def stats(self):
-        self.info()
 
     def info(self):
         """Prints a basic report of information on the tropical cyclone."""
@@ -1118,7 +1141,7 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
         "_wind", "_status_desc", "_mslp",
         "_tsNE", "_tsSE", "_tsSW", "_tsNW",
         "_ts50NE", "_ts50SE", "_ts50SW", "_ts50NW",
-        "_huNE", "_huSE", "_huSW", "_huNW", "_wind_radii",
+        "_huNE", "_huSE", "_huSW", "_huNW",
         "_tc", "_season", "_hd2"
     ]
 
@@ -1129,9 +1152,8 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
             "latitude", "longitude", "wind", "mslp",
             "tsNE", "tsSE", "tsSW", "tsNW",
             "ts50NE", "ts50SE", "ts50SW", "ts50NW",
-            "huNE", "huSE", "huSW", "huNW", "wind_radii"
-        ],
-        defaults = (None,)
+            "huNE", "huSE", "huSW", "huNW" 
+        ]
     )
 
     def __init__(self, tc_entry, tcobj, seasonobj, hd2obj):
@@ -1174,7 +1196,6 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
         self._huSE = int(tcentry.huSE) if tcentry.huSE != "-999" else None
         self._huSW = int(tcentry.huSW) if tcentry.huSW != "-999" else None
         self._huNW = int(tcentry.huNW) if tcentry.huNW != "-999" else None
-        self._wind_radii = int(tcentry.wind_radii) if tcentry.wind_radii not in ["-999", None] else None
 
         # Record parent objects
         self._tc = tcobj

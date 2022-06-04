@@ -239,7 +239,7 @@ class Hurdat2Reports:
                     climatology,
                     increment
                 ),
-                self.basin()
+                self.basin
             )
         )
         fig.suptitle(
@@ -249,7 +249,7 @@ class Hurdat2Reports:
                     climatology,
                     increment
                 ),
-                self.basin()
+                self.basin
             )
         )
         ax = plt.axes(

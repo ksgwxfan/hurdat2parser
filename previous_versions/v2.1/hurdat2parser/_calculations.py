@@ -106,7 +106,7 @@ class Hurdat2Calculations:
         ).center(79))
 
         print("{}{}".format(
-            str(self.basin()),
+            str(self.basin),
             ", {}-{}".format(year1, year2)
         ).center(79))
         print("-" * 79)
@@ -236,7 +236,7 @@ class Hurdat2Calculations:
                 year1,
                 year2,
                 descending,
-                info=kw.get("info")
+                info=kw["info"]
             )
             return result
 
@@ -400,7 +400,7 @@ class Hurdat2Calculations:
         )
 
         print("{}{}".format(
-            str(self.basin()),
+            str(self.basin),
             ", {}-{}".format(year1, year2)
         ).center(79))
         print("-" * 79)
@@ -597,7 +597,7 @@ class Hurdat2Calculations:
             ))
 
         print("{}{}".format(
-            str(self.basin()),
+            str(self.basin),
             ", {}-{}".format(year1, year2)
         ).center(79))
         print("-" * 79)
@@ -743,7 +743,7 @@ class Hurdat2Calculations:
             "RANKED BY {}".format(stattr.upper())
         ))
         print("{}{}".format(
-            str(self.basin()),
+            str(self.basin),
             ", {}-{}".format(year1, year2)
         ).center(41))
 
@@ -790,7 +790,7 @@ class Hurdat2Calculations:
         print("-" * width)
         print("Tropical Cyclone Stats for {}".format(yr).center(width))
         print("{}{}".format(
-                self.basin(),
+                self.basin,
                 ""
             ).center(width)
         )
@@ -836,7 +836,7 @@ class Hurdat2Calculations:
         # Only print this disclaimer if years in this range overlap
         if any(1967 <= y <= 1991 for y in range(year1, year2 + 1)):
             for line in textwrap.wrap(
-                    "* Hurdat2 Landfall data incomplete for seasons 1971-1990",
+                    "* Hurdat2 Landfall data incomplete for seasons 1967-1991",
                     width,
                     initial_indent=" " * 4,
                     subsequent_indent=" " * 4):
@@ -1272,17 +1272,17 @@ class TCEntryCalculations:
     @property
     def avg_wind_extent_TS(self):
         """Returns the average extent of at-least tropical storm winds."""
-        return statistics.mean(self.extent_TS)
+        return statistics.mean(extent_TS)
 
     @property
     def avg_wind_extent_TS50(self):
         """Returns the average extent of at-least gale winds."""
-        return statistics.mean(self.extent_TS50)
+        return statistics.mean(extent_TS50)
 
     @property
     def avg_wind_extent_HU(self):
         """Returns the average extent of hurricane-strength winds."""
-        return statistics.mean(self.extent_HU)
+        return statistics.mean(extent_HU)
 
 def saffir_simpson_scale(spd):
     """Static method that returns the equivalent saffir-simpson scale rating,

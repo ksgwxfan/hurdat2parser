@@ -4,8 +4,17 @@
 
 ### Contents
 
+- [v2.11](#v211)
 - [v2.1](#v21)
 - [v2.0.1](#v201)
+
+## v2.11
+- Patched to enable compatibility with the May 2022 release of the Hurdat2 database
+- Added a `TCRecordEntry` variable called `wind_radii` (the new variable included in the May 2022 Hurdat2 release. There may be some future potential in expanding the use of this variable, but its availability is currently limited to the 2021 Hurricane Season
+- Fixed calls to `TCRecordEntry` variables `avg_wind_extent_<STATUS>`
+- `info()` method for `Season` objects removed (use the `stats()` method instead)
+- modification of `<Hurdat2>.basin()`; now a method instead of property.
+- Fixed `rank_seasons_thru()` where a call without keywords (becoming a wrapper for `rank_seasons`) had an ill-advised direct call to a dictionary key instead of the get method
 
 ## v2.1
 - Restructured module for easier reading/comprehension including addition of 'read-only' variables

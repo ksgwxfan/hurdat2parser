@@ -1,33 +1,53 @@
-# hurdat2parser -- v2.11
+# hurdat2parser -- v2.1
 ---
-### *Interpreting the HURDAT2 Tropical Cyclone Dataset using Python*
+### *An Object-Oriented Approach to Viewing Tropical Cyclone Data*
 
-Hurdat2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The two primary Hurdat2 records are for the Atlantic (since 1850) and East/Central-Pacific Oceans (since 1949).
+HURDAT2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The two primary HURDAT2 records are for the Atlantic (since 1850) and East/Central-Pacific Oceans (since 1949).
 
-The purpose of this module is to provide a quick way to analyze the Hurdat2 datasets. It includes methods for retrieving, inspecting, ranking, or even exporting data for seasons, individual storms, or climatological eras.
-
-This release is primarily a "patch" in response to the newest release of the Hurdat2 database (official inclusion of data from the 2021 season). A new variable has been introduced, and this release accommodates it. But all previous versions of `hurdat2parser` will not be compatible with this and (likely) future Hurdat2 databases. But this (`2.11`) and all future versions of this program will be backward compatible to previous versions of the database.
+The purpose of this module is to provide a quick way to analyze the HURDAT2 datasets. It includes methods for retrieving, inspecting, ranking, or even exporting data for seasons, individual storms, or climatological eras.
 
 PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hurdat2parser/)
 
 ## Contents
-* [Changes/Fixes in this Version (2.11)](#changes-in-this-version-211)
+* [Changes/Fixes in this Version (2.1)](#changes-in-this-version-21)
 * [Requirements, Installation, and getting the data](#installation)
 * [Importing the module](#importing-the-module)
-* [Hurdat2 Object Structure](#hurdat2-object-structure)
+* [HURDAT2 Object Structure](#hurdat2-object-structure)
 * [Methods &amp; Attributes](#methods-and-attributes)
 * [Note on Landfall Data](#landfall-data)
 * [Roadmap](#roadmap)
 * [Credits](#credits)
 * [Copyright/License](#copyright)
 
-## Changes in this Version (2.11)
-- Patched to enable compatibility with the May 2022 release of the Hurdat2 database
-- Added a `TCRecordEntry` variable called `wind_radii` (the new variable included in the May 2022 Hurdat2 release. There may be some future potential in expanding the use of this variable, but its availability is currently limited to the 2021 Hurricane Season
-- Fixed calls to `TCRecordEntry` variables `avg_wind_extent_<STATUS>`
-- `info()` method for `Season` objects removed (use the `stats()` method instead)
-- modification of `<Hurdat2>.basin()`; now a method instead of property.
-- Fixed `rank_seasons_thru()` where a call without keywords (becoming a wrapper for `rank_seasons`) had an ill-advised direct call to a dictionary key instead of the get method
+## Changes in this Version (2.1)
+- Restructured module for easier reading/comprehension including addition of 'read-only' variables
+- Read-in slightly faster (eliminated separate `for` loop for season read-in).
+- Addition of `<Hurdat2>.basin` property, a human-readable string that reports the region/location of the hurdat2 file, based on the storms within the record.
+- Added a `stats` method for reporting on full or partial statistics and ranks for individual seasons.
+- Changed former Rank keyword `ascending` to `descending`, so that it has the same meaning of the `reverse` keyword of sorting functions.
+- Clean-up of ranking methods; concision (generally) and readability improved; significant performance reduction in `rank_climo` as it now only collects data that will be reported.
+- Addition of Season and Tropical Cyclone attributes `cat45reach` and `cat5reach`
+- fixed small issue in `rank_seasons_thru` that produced minute inaccuracies with track distance related calculations, which was, in-part, incomplete due to an overseen exclusion of a valid distance segment.
+- shifted `thru` argument on `rank_seasons_thru` to a keyword argument so the positional default keyword parameters would match up to `rank_seasons`
+- added `hurdat2()` methods to `Season` and `TropicalCylone` objects, printing Hurdat2-formatted output.
+  - The former `dump_hurdat2()` method of `TCRecordEntry` was changed to just `hurdat2()` as well.
+- added `__getitem__` method to `TropicalCyclones`; a shortcut to call `TCRecordEntry` objects
+- added flexibility to `TropicalCyclone` `output_geojson` method by allowing user to select the type of feature output: point-based or linestring-based.
+- generated geoJSON files now default to an indention of 2
+- fixed typo in code for `Season` `geoJSON` method where it was substituting MHDP values for ACE.
+- included `matplotlib`-based track maps for individual storms! It's considered experimental, but quite functional. Right now, good for Atlantic and other basins not split by 180deg Longitude. Currently does not include a legend. That is in the plans for the future though.
+- changed behavior of `__getitem__` methods:
+  - if a user is employing the `__getitem__` search method, and includes an underscore at the beginning of the storm name, it will return the newest storm where a potential match has been found. Good for referencing notorious storms with retired names.
+  - including a tuple now returns an object based on the length of the tuple
+    - Length of 1: simply returns the associated `Season` Object
+    - Length of 2: returns the associated `TropicalCyclone` Object
+    - Length of 3: returns the associated `TCRecordEntry` Object
+- `TropicalCyclone`s and `TCRecordEntry`s are now "self-aware" of parent objects, `Season`, `TropicalCyclone` respectively.
+- Added representation (`__repr__`) magic methods that describe their objects beyond class type and memory address
+- added `index` property for `TCRecordEntry` objects; returns the respective `<TropicalCyclone>.entry.index()` for the entry
+- gave control to `rank_storms`s `coordextent` behavior using a keyword `contains_method`.
+  - default of `coordextent` is `"anywhere"`, matching if any of the storm's points occurred in the bounding-box.
+  - the `coordextent`parameter is still considered experimental
 
 [&#8679; back to Contents](#contents)
 
@@ -35,13 +55,13 @@ PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hu
 
 - At the command prompt, run `pip install hurdat2parser`
   - When installing, packages `pyshp` and `geojson` and `matplotlib` will be downloaded as dependencies (if necessary).
-- You'll then need the actual Hurdat2 Data. You can get it [HERE](https://www.nhc.noaa.gov/data/#hurdat). It's just a text file. Hurdat2 files for the Atlantic Basin and East/Central Pacific Basins are available and compatible with the package.
+- You'll then need the actual Hurdat2 Data. You can get it [HERE](https://www.nhc.noaa.gov/data/#hurdat). It's a text file. HURDAT2 files for the Atlantic Basin and East/Central Pacific Basins are available and compatible with the package.
 
 [&#8679; back to Contents](#contents)
 
 ## Importing the Module
 
-- Import the module and invoke a call to the `Hurdat2` class while passing the file-name of the Hurdat2 dataset
+- Import the module and invoke a call to the `Hurdat2` class while passing the file-name of the HURDAT2 dataset
 
 ```python
 >>> import hurdat2parser
@@ -67,7 +87,7 @@ After a few seconds you'll be ready to dive into the data! Subsequent examples i
 - `Season` objects also have a dictionary (`<Season>.tc`) that holds `TropicalCyclone` objects, specific to the year.
   - There are 4 different ways to access individual storm data:
     1. `atl[1995]["Opal"]` - Storm Name; Useful if you know the name a storm was issued and the season in which it occurred.
-    2. `atl[1992]["A"]` - Storm Name first-letter; I'm not saying you'd forget a named-storm like Hurricane Andrew, but this capability would grab the storm whose first-letter matched the one passed. This primarily works for modern storms (since the beginning of the satellite era), as most in the past were not named. In the Hurdat2 record, storms that were never issued a name are given "UNNAMED" for that field.
+    2. `atl[1992]["A"]` - Storm Name first-letter; I'm not saying you'd forget a named-storm like Hurricane Andrew, but this capability would grab the storm whose first-letter matched the one passed. This primarily works for modern storms (since the beginning of the satellite era), as most in the past were not named. In the HURDAT2 record, storms that were never issued a name are given "UNNAMED" for that field.
     3. TC Number: `atl[1988][8]` - Use the storm number (type `int`) from the season. This is defined by using the ATCF ID.
 	  - This would be faster (less keystrokes): `atl[2005, 12]` - retrieves Hurricane Katrina
     4. ATCF ID: `atl[1980]["AL041980"]` - This isn't recommended because of redundancy (it can be done without the initial call to the `1980` object).
@@ -97,14 +117,13 @@ Attributes | Description | Examples
 `rank_climo(...)` | Yet another useful ranking method. This allows one to rank attributes assessed over several to many years (climatological periods) to one another. Optional keyword argument `climatology` (default is 30 years) controls the span of time that data is collected and `increment` (default is 5 years) dictates the temporal distance between periods | `atl.rank_climo(20,"track_distance_TC", climatology=10, increment=1)`
 `rank_storms(...)` | Print a report that compares storms and their attributes to each other. Similar to the above methods, other data is included in the report. See the docstring for info on `coordextent` kw usage | `atl.rank_storms(20,"HDP",1967)`
 `multi_season_info(...)` | Prints a report a gathered statistics based on a range of years. This is similar to the `info()` methods referenced in the next section. This could be thought of as an info method for a climatological period | `atl.multi_season_info(1991, 2000)`<br />`atl[2010, 2019]`
-`storm_name_search(...)` | Search through the entire Hurdat2 record for storms issued a name. If the positional keyword `info` is `True`, the matching storm's info method will print. | `atl.storm_name_search("Hugo")`
+`storm_name_search(...)` | Search through the entire HURDAT2 record for storms issued a name. If the positional keyword `info` is `True`, the matching storm's info method will print. | `atl.storm_name_search("Hugo")`
 `output_climo(...)` | outputs a .csv file using the `csv` package of 1-year incremented climatological periods. This csv file can then be opened in a spreadsheet program. To compare or rank, the spreadsheet GUI layout is much easier to use especially due to instant sorting and filtering. This accepts a positional keyword argument (`climatology=30`). | `atl.output_climo(15)`
-`output_seasons_csv(...)` | Similar to the above, but for seasons. It takes no arguments. In other words, it would be redundant to run it multiple times, because as the `hurdat2parser` package doesn't natively allow modification of the data, it would just output the same data over and over. The only exception would be when the Hurdat2 database is updated by the NHC. With this in mind, it will automatically write-over the csv if it already exists (file-name is auto-generated within the method). | `atl.output_seasons_csv()`
+`output_seasons_csv(...)` | Similar to the above, but for seasons. It takes no arguments. In other words, it would be redundant to run it multiple times, because as the `hurdat2parser` package doesn't natively allow modification of the data, it would just output the same data over and over. The only exception would be when the HURDAT2 database is updated by the NHC. With this in mind, it will automatically write-over the csv if it already exists (file-name is auto-generated within the method). | `atl.output_seasons_csv()`
 `output_storms_csv(...)` | Similar to above, but for individual storms. | `atl.output_storms_csv()`
 `coord_contains(...)` | Takes 3 tupled lat-lon coordinates. The purpose is to inquire whether the first arg (the test coordinate) is contained within a bounding box formed by the other two coordinates passed (returns a `bool`. This is generally just accessed via the ranking methods | `atl.coord_contains(`<br />&nbsp;&nbsp;&nbsp;&nbsp;`[30.4,-85.0]`,<br />&nbsp;&nbsp;&nbsp;&nbsp;`[31.5, 86.0],`<br />&nbsp;&nbsp;&nbsp;&nbsp;`[29.0, 84.0]`<br />`) -> True`
-`BASIN_DICT` | A dictionary containing abbreviations (keys) and definitions (values) of various basins around the world that hurricane data is kept. This is referenced via the `basin()` method. The data used to form this object came from IBTrACS | `<Hurdat2>.BASIN_DICT`
-`basin(season=None)` | Interprets and returns a readable string identifying the TC basin based on the storms within the record. This allows support of dynamically-created singular OR multiple Hurdat2 datasets OR individual seasons (if a `Season` object is passed to the method). | `atl.basin -> "North Atlantic Basin"
-`record_range` | Returns a tuple of the beginning year and end year of the Hurdat2 record | `atl.record_range -> (1851, 2020)`
+`basin` | Interprets and returns a readable string identifying the TC basin based on the storms within the record. This allows support of dynamically-created singular OR multiple Hurdat2 datasets. The data used to form this property came from IBTrACS | `atl.basin -> "North Atlantic Basin"
+`record_range` | Returns a tuple of the beginning year and end year of the HURDAT2 record | `atl.record_range -> (1851, 2020)`
 
 [&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
 
@@ -114,6 +133,7 @@ Attributes | Description | Examples
 :---: | :---: | :---:
 `output_shp()` | Generate a GIS-compatible Shapefile using the `shapefile` package | `atl[1988]["Gilbert"].output_shp()`
 `output_geojson()` | Generate a GIS-compatible and text-readable `.geojson` file via the `geojson` package; can also be used in GIS applications | `atl[2000].output_geojson()`
+`info()` | Prints basic stats | `atl[2005].info()`
 `summary()` | Prints detailed statistics for the season or life of the TC | `atl[2019]["dorian"].summary()`
 `landfalls`<br /> | \*SEE [DISCLAIMER FOR LANDFALL INFO](#landfall-data)\* Sum of all landfalls (remember, a storm can make multiple landfalls). `<Season>.landfalls` is also an unfiltered aggregate of its storms landfalls. At the seasonal level, you'd probably be more interested in the attribute `landfall_TC` (see following section) | `atl[1960]["doNnA"].landfalls`
 `landfall_<STATUS>`<br />*\-can be TC, TD, TS, HU, or MHU* | `Season`: qty of TC's that made landfall as the inquired status; `TropicalCyclone`: `bool` indicating if the storm made landfall while the inquired status<br />*\-CAUTION: These attrs are exclusive of landfalls made while of stronger designation\-* | `atl[1996].landfall_TS -> 2`<br />`atl[2011]["I"].landfall_HU -> True`
@@ -134,7 +154,7 @@ Attribute | Description | Example
 `output_geojson_segmented()` | Generates a geojson including each segment from each tropical-cyclone from a given season; each individual segment from each individual storm will be representeds | `atl[2003].output_geojson_segmented()`
 `tracks` | Returns the quantity of tropical cyclones from a season | `atl[1995].tracks`
 `<STATUS>only`<br />*\-can be TD, TS, or HU* | Returns the quantity of TC's from a season that made were given the inquired designation, but never strengthened beyond it. `HUonly` implies Category 1 and 2 storms only. To inquire about `MHU`, use the `MHUreach` attr | `atl[1950].TDonly`<br />`atl[2017].HUonly`
-`stats()` | prints a report filled with statistics and ranks for the season, optionally compared with a subset of seasons and/or partial seasons. For `TropicalCyclones`, this is a mirror-method of `.info()` | `atl[2020].stats()`<br>`atl[2005].stats(thru=(9,30))`<br>`atl[1989]["hugo"].stats()
+`stats()` | prints a report filled with statistics and ranks for the season, optionally compared with a subset of seasons and/or partial seasons. | `atl[2020].stats()`<br>`atl[2005].stats(thru=(9,30))`
 
 [&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
 
@@ -149,7 +169,6 @@ Attribute | Description | Example
 `track_<EI1>_perc_<EI2>`<br />*\-&lt;EI1&gt; can be TS, HU, or MHU*<br />*\-&lt;EI2&gt; can be TC, TS, HU, or MHU* | Returns the the storm's &lt;EI2&gt; track_distance divided by the track distance while of status &lt;EI1&gt;. &lt;EI1&gt; must be of higher hierarchal status than &lt;EI2&gt; | `atl[2005][25].track_HU_perc_TC`<br />`atl[2003]["Fabian"].track_MHU_perc_TS`
 `track_map()` | Generates a map of the storm's track using `matplotlib`. Check the docstring for ways to modify the output to your liking. | `atl["_katrina"].track_map()`
 `perc_ACE`<br>`perc_HDP`<br>`perc_MHDP` | Return the percentage (in decimal form) of the contribution of the storm's ACE, HDP, or MHDP value to the season's value | `atl["_matthew"].perc_MHDP
-`info()` | Prints basic stats for the tropical cyclone | `atl[1989]["hugo"].info()`
 
 [&#8679; back to Methods &amp; Attributes](#methods-and-attributes)
 
@@ -165,14 +184,13 @@ Attribute | Description | Example
 `wind` | The maximum-sustained winds at the time of entry-recording
 `mslp` | The Mean Sea-Level Pressure (in hPa or mb) at the time of entry-recording
 `hurdat2()` | Returns a reassembled Hurdat2-formatted string, identical to the one parsed to create the entry
-`wind_radii` | The Radius of Maximum Winds. *As of the May 2022 release of the Hurdat2 database, this is a new variable and the availability of it belongs solely to the 2021 Hurricane season (for now).*
 
 [&#8679; back to Methods &amp; Attributes](#methods-and-attributes)<br />
 [&#8679; back to Contents](#contents)
 
 ## Landfall Data
 
-An important point to keep in mind when viewing data and ranking, Hurdat2's landfall data is incomplete. It is progressively being updated in conjunction with the yearly release of the dataset. Please see the documentation  [Hurdat2 Format Guide](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-atl-1851-2021.pdf) for more detail on currently-available landfall data temporal scope.
+An important point to keep in mind when viewing data and ranking, HURDAT2's landfall data is incomplete. It is progressively being updated in conjunction with the yearly release of the dataset. Please see the documentation  [HURDAT2 Format Guide](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-nov2019.pdf) for more detail on currently-available landfall data temporal scope.
 
 [&#8679; back to Contents](#contents)
 
@@ -183,20 +201,20 @@ An important point to keep in mind when viewing data and ranking, Hurdat2's land
 - [ ] Include legends for `<TropicalCyclone>.track_map()`
 - [ ] Comparison methods to directly compare one season to another or specific storms to another.
 - [ ] Formulate a `stats()` method for `TropicalCyclone`s (to eventually replace their `info` method); including ranking/comparing to storms across the record or a subset of seasons, including a `rank_storms_thru()` companion method for `Hurdat2` objects.
+- [ ] Deprecate `<Season>.info()` method (PROBABLY); essentially replaced by `stats()` method. This may depend on success of attempting to speed up the `stats` method.
 - [ ] Track distance percentage of season total for `TropicalCyclone`s
 - [ ] Maybe simpler rank methods so values sought for ranking will guarantee to show
-- [X] Deprecate `<Season>.info()` method
 - [x] Inclusion of `matplotlib` methods
 
 [&#8679; back to Contents](#contents)
 
 ## Credits
 
-- Hurdat Reference: `Landsea, C. W. and J. L. Franklin, 2013: Atlantic Hurricane Database Uncertainty and Presentation of a New Database Format. Mon. Wea. Rev., 141, 3576-3592.`
+- HURDAT Reference: `Landsea, C. W. and J. L. Franklin, 2013: Atlantic Hurricane Database Uncertainty and Presentation of a New Database Format. Mon. Wea. Rev., 141, 3576-3592.`
 - [Haversine Formula (via Wikipedia)](https://en.wikipedia.org/wiki/Haversine_formula)
 - Bell, et. al. Climate Assessment for 1999. *Bulletin of the American Meteorological Society.* Vol 81, No. 6. June 2000. S19.
 - <span>G. Bell, M. Chelliah.</span> *Journal of Climate.* Vol. 19, Issue 4. pg 593. 15 February 2006.
-- [Hurdat2 Format Guide (PDF)](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-atl-1851-2021.pdf)
+- [HURDAT2 Format Guide](https://www.nhc.noaa.gov/data/hurdat/hurdat2-format-nov2019.pdf)
 - [Natural Earth](https://www.naturalearthdata.com/) GIS Data (data extracted there-from to display maps)
 
 [&#8679; back to Contents](#contents)
@@ -204,7 +222,7 @@ An important point to keep in mind when viewing data and ranking, Hurdat2's land
 ## Copyright
 
 **Author**: Kyle S. Gentry<br />
-Copyright &copy; 2019-2022, Kyle Gentry (KyleSGentry@outlook.com)<br />
+Copyright &copy; 2019-2021, Kyle Gentry (KyleSGentry@outlook.com)<br />
 **License**: MIT<br />
 **GitHub**: [https://github.com/ksgwxfan/hurdat2parser](https://github.com/ksgwxfan/hurdat2parser)<br />
 **Author's Webpages**:
