@@ -5,7 +5,7 @@
 ### Contents
 
 - [v2.2](#v22)
-- [v2.11](#v211)
+- [v2.1.1](#v211)
 - [v2.1](#v21)
 - [v2.0.1](#v201)
 
@@ -60,7 +60,8 @@
   - introduced a new method `<Hurdat2>.basin_abbr()` which returns a list of basin abbreviations used; will be used in report outputs.
 - Fixed memory-location identification in `__repr__` methods
 
-## v2.11
+## v2.1.1
+- \*\*\* This version used to be `v2.11`. I changed it because it was conflicting with PyPI recognizing `v2.2` as the newest.
 - Patched to enable compatibility with the May 2022 release of the Hurdat2 database
 - Added a `TCRecordEntry` variable called `wind_radii` (the new variable included in the May 2022 Hurdat2 release. There may be some future potential in expanding the use of this variable, but its availability is currently limited to the 2021 Hurricane Season
 - Fixed calls to `TCRecordEntry` variables `avg_wind_extent_<STATUS>`
