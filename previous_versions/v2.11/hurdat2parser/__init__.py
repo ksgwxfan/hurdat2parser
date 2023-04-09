@@ -1,29 +1,23 @@
-"""hurdat2parser v2.2
+"""hurdat2parser v2.11
 
 https://github.com/ksgwxfan/hurdat2parser
 
-hurdat2parser v2.x is provides a convenient access to interpret and work with
-tropical cyclone data that is contained in a widely-used and updated dataset,
-HURDAT2 (https://www.nhc.noaa.gov/data/#hurdat). The purpose of this module is to
-provide a quick way to investigate HURDAT2 data. It includes methods for
-retrieving, inspecting, ranking, or even exporting data for seasons, individual
-storms, or climatological eras.
+hurdat2parser v2.x is an object-oriented approach to viewing tropical cyclone
+data that is contained in a widely-used and updated dataset, HURDAT2
+(https://www.nhc.noaa.gov/data/#hurdat). The purpose of this module is to
+provide a quick way to investigate HURDAT2 data. Its aim is to make it easier
+to access historical hurricane data.
 
 To get started:
 1) Install: >>> pip install hurdat2parser
-2a) Download HURDAT2 Data: https://www.nhc.noaa.gov/data/#hurdat
-    OR See example call below to have the program attempt to download it for you
+2) Download HURDAT2 Data: https://www.nhc.noaa.gov/data/#hurdat
 3) In python, import and invoke call using the hurdat2 file you downloaded (the
     following is just an example):
 
     >>> import hurdat2parser
     >>> atl = hurdat2parser.Hurdat2("path_to_hurdat2.txt")
 
-    OR ATTEMPT TO RETRIEVE FROM ONLINE
-    >>> atl = hurdat2parser.Hurdat2(basin="atl")
-    # Use "pac" to get the NE/CEN Pacific version
-
-hurdat2parser, Copyright (c) 2019-2023, Kyle Gentry (KyleSGentry@outlook.com)
+hurdat2parser, Copyright (c) 2019-2022, Kyle Gentry (KyleSGentry@outlook.com)
 License: MIT
 ksgwxfan.github.io
 echotops.blogspot.com
@@ -33,10 +27,8 @@ import calendar
 import difflib
 import math
 import re
-import urllib.request
 import itertools
 import datetime
-import os
 import collections
 
 from . import _aliases, _calculations, _reports
@@ -44,161 +36,41 @@ from . import _aliases, _calculations, _reports
 class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _reports.Hurdat2Reports):
 
     BASIN_DICT = dict(
-        AL = "North Atlantic",
-        NA = "North Atlantic",
-        SL = "South Atlantic",
-        SA = "South Atlantic",
-        EP = "East Pacific",
-        CP = "Central Pacific",
-        WP = "West Pacific",
-        SH = "Southern Hemisphere",
-        IO = "North Indian",
-        NI = "North Indian",
-        SI = "South Indian",
-        SP = "South Pacific",
-        AS = "Arabian Sea",
-        BB = "Bay of Bengal",
-    )
+            AL = "North Atlantic",
+            NA = "North Atlantic",
+            SL = "South Atlantic",
+            SA = "South Atlantic",
+            EP = "East Pacific",
+            CP = "Central Pacific",
+            WP = "West Pacific",
+            SH = "Southern Hemisphere",
+            IO = "North Indian",
+            NI = "North Indian",
+            SI = "South Indian",
+            SP = "South Pacific",
+            AS = "Arabian Sea",
+            BB = "Bay of Bengal",
+        )
 
-    def __init__(self, *hurdat2file_list, **kw):
+    def __init__(self, hurdat2file):
         """Initializes a new Hurdat2 object.
         
         Arguments:
-            *hurdat2file_list: the local file-paths (or URLs) of the hurdat2
-            record(s)
-
-        Keyword Arguments:
-            basin (None): If you want to try to retrieve the latest hurdat2
-                file from the NHC to ingest, let it know which basin you want
-                to download. Acceptable strings to use would be "atl", "al", or
-                "atlantic" for the North Atlantic hurdat2. For the North-East/
-                Central Pacific, "pac", "nepac", and "pacific" are recognized.
-                Of note, the Atlantic hurdat2 file is around 6MB.
-            urlcheck (False): If True, urls are accepted. This enables the
-                download of a remote version of a Hurdat2 dataset. The url
-                string is passed as if a local file and will eventually be
-                attempted to be downloaded.
-
-        Example call:
-            atl = hurdat2parser.Hurdat2("atlantic_hurdat2.txt")
-                * Attempts to load a local file named "hurdat2_file.txt"
-            atl = hurdat2parser.Hurdat2(basin="pac")
-                * Attempts to download the latest NE/CEN Pacific hurdat2 file
-            atl = hurdat2parser.Hurdat2("https://somewebsite.zxcv/hd2.txt", urlcheck=True)
-                * Attempts to download inspect the passed-string as a url and
-                tries to download
-            
+            hurdat2file (str): file-path of the hurdat2 record (a text file)
         """
         self._tc = {}        # Dictionary containing all hurdat2 storm data
         self._season = {}    # Dictionary containing all relevant season data
-
-        # Validity checking -------------------------------
-        # no local path given and Non-existent or invalid basin
-        if len(hurdat2file_list) == 0 \
-        and (kw.get("basin") is None or type(kw.get("basin")) != str):
-            raise ValueError(
-                "No path to a local hurdat2 file given and no valid basin "
-                "indicated to attempt online retrieval."
-            )
-        # No online, but invalid local paths
-        if kw.get("basin") is None \
-        and len(hurdat2file_list) != 0 \
-        and all(os.path.exists(fi) == False for fi in hurdat2file_list) \
-        and kw.get("urlcheck", False) is False:
-            raise FileNotFoundError(
-                "{} {} not {}valid file path{}.".format(
-                    ", ".join([
-                        "'{}'".format(fi) for fi in hurdat2file_list
-                    ]),
-                    "is" if len(hurdat2file_list) == 1 else "are",
-                    "a " if len(hurdat2file_list) == 1 else "",
-                    "" if len(hurdat2file_list) == 1 else "s",
-                )
-            )
-        # -------------------------------------------------------
-
-        # Download from online
-        if type(kw.get("basin")) == str \
-        and kw.get("basin").lower() in [
-            "al", "atl", "atlantic", "pac", "nepac", "pacific"
-        ]:
-            # determines which dataset will be downloaded
-            basin_prefix = "nepac-" \
-                if kw.get("basin").lower() in ["pac", "nepac", "pacific"] \
-                else ""
-
-            # https://www.nhc.noaa.gov/data/hurdat/hurdat2-1851-2021-100522.txt
-            with urllib.request.urlopen("https://www.nhc.noaa.gov/data/hurdat", timeout=5) as u:
-                _pgdata = u.read().decode()
-
-            _hd2list = re.findall(
-                "hurdat2-{}".format(basin_prefix) + r"\d{4}-\d{4}.*\.txt",
-                _pgdata,
-                flags=re.I
-            )
-            hd2url = "https://www.nhc.noaa.gov/data/hurdat/" \
-                + sorted(_hd2list, reverse=True)[0]
-
-            # read in the url
-            try:
-                with urllib.request.urlopen(hd2url, timeout=5) as u:
-                    hd2fileobj = u.read().decode()
-                # print("* Downloaded '{}'".format(hd2url))
-            except:
-                if len(hurdat2file_list) == 0:
-                    raise
-            self._build_tc_dictionary(hd2fileobj, False)
-            # print("* Download and read-in of `{}` successful!".format(
-                # hd2url
-            # ))
-        # invalid basin listed
-        elif type(kw.get("basin")) == str:
-            if len(hurdat2file_list) == 0:
-                raise ValueError(
-                    "'{}' is an unrecognized basin. ".format(kw.get("basin")) \
-                  + "Please use something like 'atl' or 'pac' to direct the " \
-                  + "module to retrieve the deisred hurdat2 file from online."
-                )
-            else:
-                print(
-                    "* Skipping basin download. " \
-                  + "'{}' is an unrecognized basin. ".format(kw.get("basin")) \
-                  + "Please use something like 'atl' or 'pac' to direct the " \
-                  + "module to retrieve the deisred hurdat2 file from online."
-                )
-
-        for hd2file in hurdat2file_list:
-            if os.path.exists(hd2file):
-                self._build_tc_dictionary(hd2file)  # Call to build/analyze the hurdat2 file
-                # print("* Read-in of `{}` successful!".format(hd2file))
-            # download a given url
-            elif kw.get("urlcheck"):
-                try:
-                    with urllib.request.urlopen(hd2file, timeout=5) as u:
-                        hd2fileobj = u.read().decode()
-                    # print("* Downloaded '{}'".format(hd2file))
-                except Exception as e:
-                    print("* Skipping '{}' due to {}".format(hd2file, e))
-                    hd2fileobj = None
-                if hd2fileobj is not None:
-                    self._build_tc_dictionary(hd2fileobj, False)
-                    # print("* Download and read-in of `{}` successful!".format(
-                        # hd2file
-                    # ))
-            else:
-                print("* Skipping `{}` because that path doesn't exist!".format(
-                    hd2file
-                ))
-
-        if len(self) == 0:
-            raise ValueError("No storm data ingested!")
+        self._rank = {"tc":{}, "season":{}}
+        # used to prevent multiple loads of the same file to the same object
+        self._filesappended = []
+        self._build_tc_dictionary(hurdat2file)  # Call to build/analyze the hurdat2 file
 
     def __repr__(self):
         return "<{} object - {}: {}-{} - at 0x{}>".format(
             re.search(r"'(.*)'", str(type(self)))[1],
             self.basin(),
             *self.record_range,
-            hex(id(self))[2:].upper().zfill(16)
+            str(id(self)).upper().zfill(16)
         )
 
     def __len__(self):
@@ -230,7 +102,7 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
                 season object, or a call to the name-search function
         """
         # multi-season info
-        if type(s) == slice:
+        if type(s) is slice:
             st = s.start
             en = s.stop-1
             return self.multi_season_info(st, en)
@@ -241,69 +113,228 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
             elif len(s) >= 2:
                 return self[s[0]][s[1:]]
         # Season passed as int
-        elif type(s) == int:
+        elif type(s) is int:
             return self.season[s]
         # String based
         elif type(s) == str:
             # ATCFID Request
-            if re.search(r"^[A-Z]{2}[0-9]{6}.*", s, flags=re.I):
+            if re.search(r"^[A-Z]{2}[0-9]{6}.*", str(s), flags=re.I):
                 return self.tc[s.upper()[:8]]
             # Season Request
             elif s.isnumeric():
                 return self.season[int(s[:4])]
             # Name Search implied (will return the last storm so-named)
             else:
-                return self.storm_name_search(s, False, True if "_" in s or "-" in s else False)
+                return self.storm_name_search(s, False, True if "_" in s else False)
         # try handling all other types by converting to str then search by name
         else:
             return self.storm_name_search(str(s), False)
 
-    def _build_tc_dictionary(self, hurdat2file, path=True):
+    def _build_tc_dictionary(self, hurdat2file):
         """Populate the Hurdat2 object with data from a hurdat2 file.
 
         Arguments:
-            hurdat2file: the file-path (or string version) of the hurdat2 file
-
-        Default Arguments:
-            path (True): this tells the method what kind object to expect. By
-                default, it will be considered a file-path. If False, it will
-                expect a stringified version of the database.
+            hurdat2file: the file-path of the hurdat2 file
         """
-        if path is True:
-            with open(hurdat2file) as h:
-                _hd2data = h.read().splitlines()
-        else:
-            _hd2data = hurdat2file.splitlines()
-
-        for line in _hd2data:
-            lineparsed = re.split(r", *", re.sub(r", *$", "", line))
-            # New Storm
-            if re.search(r"^[A-Z]{2}\d{6}",lineparsed[0]):
-                atcfid = lineparsed[0]
-                tcyr = int(atcfid[4:])
-                # Create Season
-                if tcyr not in self.season:
-                    self.season[tcyr] = Season(tcyr, self)
-                # Create TropicalCyclone
-                self.tc[atcfid] = TropicalCyclone(
-                    atcfid,
-                    lineparsed[1],
-                    self.season[tcyr],
-                    self
-                )
-                # Add storm to that particular season
-                self.season[tcyr].tc[atcfid] = self.tc[atcfid]
-            # TCRecordEntry for storm indicated
-            else:
-                self.tc[atcfid].entry.append(
-                    TCRecordEntry(
-                        lineparsed.copy(),
-                        line,
-                        self.tc[atcfid],
+        if hurdat2file in self.filesappended:
+            return print("OOPS! That file has already been read-in to this Hurdat2 object.")
+        self.filesappended.append(hurdat2file)
+        with open(hurdat2file) as h:
+            # for line in h.readlines():
+                # lineparsed = [each.strip() for each in line.strip("\n").split(",")]
+            for line in h.read().splitlines():
+                lineparsed = re.split(r", *", re.sub(r", *$", "", line))
+                # above definition will leave a trailing comma at the end of e
+                lineparsed[-1] = lineparsed[-1].strip(",")
+                # New Storm
+                if re.search(r"^[A-Z]{2}\d{6}",lineparsed[0]):
+                    atcfid = lineparsed[0]
+                    tcyr = int(atcfid[4:])
+                    # Create Season
+                    if tcyr not in self.season:
+                        self.season[tcyr] = Season(tcyr, self)
+                    # Create TropicalCyclone
+                    self.tc[atcfid] = TropicalCyclone(
+                        atcfid,
+                        lineparsed[1],
                         self.season[tcyr],
                         self
                     )
-                )
+                    # Add storm to that particular season
+                    self.season[tcyr].tc[atcfid] = self.tc[atcfid]
+                # TCRecordEntry for storm indicated
+                else:
+                    self.tc[atcfid].entry.append(
+                        TCRecordEntry(
+                            lineparsed.copy(),
+                            self.tc[atcfid],
+                            self.season[tcyr],
+                            self
+                        )
+                    )
+
+    def multi_season_info(self, year1=None, year2=None):
+        """Grab a chunk of multi-season data and report on that climate era.
+        This method can be viewed as a climatological era info method.
+        
+        Default Arguments:
+            year1 (None): The start year
+            year2 (None): The end year
+        """
+
+        year1 = self.record_range[0] if year1 is None \
+            or year1 < self.record_range[0] else year1
+        year2 = self.record_range[1] if year2 is None \
+            or year2 > self.record_range[1] else year2
+        # ---------------------
+
+        # for yr1, yr2 in [(y, y+climatology-1) \
+                # for y in range(1801, year2, increment) \
+                # if year1 <= y <= year2 \
+                # and year1 <= y+climatology-1 <= year2]:
+            # climo[yr1, yr2] = Era(
+                # (yr1, yr2),
+                # sum(self.season[s].tracks for s in range(yr1, yr2+1)),
+                # sum(self.season[s].landfalls for s in range(yr1, yr2+1)),
+                # sum(self.season[s].landfall_TC for s in range(yr1, yr2+1)),
+                # sum(self.season[s].landfall_TD for s in range(yr1, yr2+1)),
+                # sum(self.season[s].landfall_TS for s in range(yr1, yr2+1)),
+                # sum(self.season[s].landfall_HU for s in range(yr1, yr2+1)),
+                # sum(self.season[s].landfall_MHU for s in range(yr1, yr2+1)),
+                # sum(self.season[s].TSreach for s in range(yr1, yr2+1)),
+                # sum(self.season[s].TSonly for s in range(yr1, yr2+1)),
+                # sum(self.season[s].HUreach for s in range(yr1, yr2+1)),
+                # sum(self.season[s].HUonly for s in range(yr1, yr2+1)),
+                # sum(self.season[s].MHUreach for s in range(yr1, yr2+1)),
+                # sum(self.season[s].cat45reach for s in range(yr1, yr2+1)),
+                # sum(self.season[s].cat5reach for s in range(yr1, yr2+1)),
+                # sum(self.season[s].track_distance for s in range(yr1, yr2+1)),
+                # sum(self.season[s].track_distance_TC for s in range(yr1, yr2+1)),
+                # sum(self.season[s].track_distance_TS for s in range(yr1, yr2+1)),
+                # sum(self.season[s].track_distance_HU for s in range(yr1, yr2+1)),
+                # sum(self.season[s].track_distance_MHU for s in range(yr1, yr2+1)),
+                # sum(self.season[s].ACE for s in range(yr1, yr2+1)),
+                # sum(self.season[s].HDP for s in range(yr1, yr2+1)),
+                # sum(self.season[s].MHDP for s in range(yr1, yr2+1))
+            # )
+        # # If this method was called by the output_climo method...
+        # if "op" in climoparam:
+            # return climo
+
+        # # List of tropical-cyclones sorted by stattr
+        # sorted_climo = sorted(
+            # [era for era in climo.values()],
+            # key=lambda era: getattr(era, stattr),
+            # reverse = descending
+        # )
+        # # Values sorted
+        # ranks = sorted(
+            # set([
+                # getattr(era, stattr) for era in sorted_climo \
+                    # if descending is False \
+                    # or getattr(era, stattr) > 0
+            # ]),
+            # reverse = descending
+        # )[:quantity]
+        # --------------------------------
+        class Era(object):
+            def __init__(self, **kw):
+                self.__dict__.update(**kw)
+
+        yrrange = range(year1, year2+1)
+        clmt = Era(
+            era = (year1, year2),
+            tracks = sum(self.season[s].tracks for s in yrrange),
+            landfalls = sum(self.season[s].landfalls for s in yrrange),
+            landfall_TC = sum(self.season[s].landfall_TC for s in yrrange),
+            landfall_TD = sum(self.season[s].landfall_TD for s in yrrange),
+            landfall_TS = sum(self.season[s].landfall_TS for s in yrrange),
+            landfall_HU = sum(self.season[s].landfall_HU for s in yrrange),
+            landfall_MHU = sum(self.season[s].landfall_MHU for s in yrrange),
+            TSreach = sum(self.season[s].TSreach for s in yrrange),
+            TSonly = sum(self.season[s].TSonly for s in yrrange),
+            HUreach = sum(self.season[s].HUreach for s in yrrange),
+            HUonly = sum(self.season[s].HUonly for s in yrrange),
+            MHUreach = sum(self.season[s].MHUreach for s in yrrange),
+            cat45reach = sum(self.season[s].cat45reach for s in yrrange),
+            cat5reach = sum(self.season[s].cat5reach for s in yrrange),
+            track_distance = sum(self.season[s].track_distance for s in yrrange),
+            track_distance_TC = sum(self.season[s].track_distance_TC for s in yrrange),
+            track_distance_TS = sum(self.season[s].track_distance_TS for s in yrrange),
+            track_distance_HU = sum(self.season[s].track_distance_HU for s in yrrange),
+            track_distance_MHU = sum(self.season[s].track_distance_MHU for s in yrrange),
+            ACE = sum(self.season[s].ACE for s in yrrange),
+            HDP = sum(self.season[s].HDP for s in yrrange),
+            MHDP = sum(self.season[s].MHDP for s in yrrange)
+        )
+
+        # Print Report
+        totalyrs = year2 - year1 + 1
+        print("")
+        print(" --------------------------------------------------------")
+        print(" Tropical Cyclone Season Stats, for {} to {}".format(year1, year2))
+        print(" --------------------------------------------------------")
+        print(" {:^56}".format(
+            "* Distances in nmi; * Energy Indices in 10**(-4) kt^2"
+        ))
+        print(" --------------------------------------------------------")
+        print(" Avg Track Qty (Total): {}/yr ({})".format(
+            round(clmt.tracks / totalyrs,1),
+            clmt.tracks
+        ))
+        print(" Avg TC Track Distance (Total): {}/yr ({})".format(
+            round(clmt.track_distance_TC / totalyrs,1),
+            round(clmt.track_distance_TC,1)
+        ))
+        print(" Avg TS Qty (Total): {}/yr ({})".format(
+            round(clmt.TSreach / totalyrs,1),
+            clmt.TSreach
+        ))
+        print("   -- Avg TS Track Distance (Total): {}/yr ({})".format(
+            round(clmt.track_distance_TS / totalyrs,1),
+            round(clmt.track_distance_TS,1)
+        ))
+        print("   -- Avg ACE (Total): {}/yr ({})".format(
+            round(clmt.ACE * 10**(-4) / totalyrs,1),
+            round(clmt.ACE * 10**(-4),1)
+        ))
+        print(" Avg HU Qty (Total): {}/yr ({})".format(
+            round(clmt.HUreach / totalyrs,1),
+            clmt.HUreach
+        ))
+        print("   -- Avg HU Track Distance (Total): {}/yr ({})".format(
+            round(clmt.track_distance_HU / totalyrs,1),
+            round(clmt.track_distance_HU,1)
+        ))
+        print("   -- Avg HDP (Total): {}/yr ({})".format(
+            round(clmt.HDP * 10**(-4) / totalyrs,1),
+            round(clmt.HDP * 10**(-4),1)
+        ))
+        print(" Avg MHU Qty (Total): {}/yr ({})".format(
+            round(clmt.MHUreach / totalyrs,1),
+            clmt.MHUreach
+        ))
+        print(" Avg Cat-4 and Cat-5 Qty (Total): {}/yr ({})".format(
+            round(clmt.cat45reach / totalyrs,1),
+            clmt.cat45reach
+        ))
+        print(" Avg Cat-5 Qty (Total): {}/yr ({})".format(
+            round(clmt.cat5reach / totalyrs,1),
+            clmt.cat5reach
+        ))
+        print("   -- Avg MHU Track Distance (Total): {}/yr ({})".format(
+            round(clmt.track_distance_MHU / totalyrs,1),
+            round(clmt.track_distance_MHU,1)
+        ))
+        print("   -- Avg MHDP (Total): {}/yr ({})".format(
+            round(clmt.MHDP * 10**(-4) / totalyrs,1),
+            round(clmt.MHDP * 10**(-4),1)
+        ))
+        print(" Avg Landfalling System Qty (Total): {}/yr ({})".format(
+            round(clmt.landfall_TC / totalyrs,1),
+            clmt.landfall_TC
+        ))
+        print("")
 
     def storm_name_search(self, searchname, info=True, feeling_lucky=False):
         """Search the Hurdat2 object's records by storm name. Returns the
@@ -330,7 +361,7 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
         # Searching for a storm of a particular name; will return the most
         #   recent storm where a match was found in the name
         if feeling_lucky is True:
-            searchname = searchname.replace("_", "").replace("-", "")
+            searchname = searchname.replace("_", "")
             # 1st pass
             matchlist = [(TC, 1.0) for TC in self.tc.values() if searchname == TC.name]
 
@@ -377,9 +408,7 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
                             ).quick_ratio()
                         ) for TC in self.tc.values() if TC.name[0] == searchname[0]
                     ]
-                ),
-                key=lambda tup: tup[1],
-                reverse=True
+                ), key=lambda tup: tup[1], reverse=True
             )
         #3rd pass - if necessary; if no match found
         if len(matchlist) == 0:
@@ -449,43 +478,22 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
         else:
             return False
 
-    def basin_abbr(self, season_obj=None):
-        """Returns a list of basin abbreviations used in the hurdat2 record.
-        
-        This is primarily of use to the .basin() method.
-        """
-        try:
-            return list(set([
-                tc.atcfid[:2]
-                for tc in (
-                    self.tc.values()
-                    if season_obj is None
-                    else season_obj.tc.values()
-                )
-            ]))
-        except:
-            return ["UNK"]
-
     def basin(self, season_obj=None):
-        """Returns a string containing the various oceanic basins represented in the hurdat2 database(s) being analyzed. As an example, the NHC releases a East/Central Pacific Hurdat2.
 
-        Keyword Argument:
-            season_obj (None): This is used to isolate a basin names from a particular season. It's possible in the aforementioned East/Central Pacific that cyclones occur in the east pacific but not central. So a report or inquired stats from a particular season wouldn't need to show data from the non-existent basin.
-        """
-
+        basin_id = list(set([
+            tc.atcfid[:2] for tc in (self.tc.values() if season_obj is None else season_obj.tc.values())
+        ]))
         basin_names = []
         try:
             basin_names = list(set([
-                self.BASIN_DICT[basin]
-                for basin in self.basin_abbr(season_obj)
+                self.BASIN_DICT[basin] for basin in basin_id
             ]))
         except:
             pass
+        # print(basin_id)
         if len(basin_names) > 0:
             return " / ".join(basin_names) \
-                + " Basin{}".format(
-                    "s" if len(self.basin_abbr(season_obj)) > 1 else ""
-                )
+                + " Basin{}".format("s" if len(basin_id) > 1 else "")
         else:
             return "Unknown Region"
 
@@ -508,7 +516,7 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
             re.search(r"'(.*)'", str(type(self)))[1],
             self.year,
             self._hd2.basin(self),
-            hex(id(self))[2:].upper().zfill(16)
+            str(id(self)).upper().zfill(16)
         )
 
     def __len__(self):
@@ -517,40 +525,19 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
 
     def __getitem__(self, s):
         # Storm Number passed
-        if type(s) == int and s >= 0:
-            tcmatches = [
-                tc for atcfid, tc in self.tc.items()
+        if type(s) == int:
+            for atcfid, tc in self.tc.items():
                 if re.search(
                     r"[A-Z][A-Z]{:0>2}\d\d\d\d".format(s),
                     atcfid
-                )
-            ]
-            if len(tcmatches) == 0:
-                return list(self.tc.values())[s]
-            elif len(tcmatches) == 1:
-                return tcmatches[0]
-            else:
-                print("* Multiple matches found. Choose intended storm:")
-                print("------------------------------------------------")
-                for indx, tc in enumerate(tcmatches):
-                    print("{}. {} - '{}'".format(
-                        indx+1,
-                        tc.atcfid,
-                        tc.name
-                    ))
-                print("------------------------------------------------")
-                choice = input("  -- Enter selection ('c' to cancel): ")
-                while True:
-                    if choice.isnumeric() \
-                    and 0 < int(choice) <= len(tcmatches):
-                        return tcmatches[int(choice)-1]
-                    elif len(choice) > 0 and choice.lower()[0] == "c":
-                        raise KeyboardInterrupt
-                    else:
-                        choice = input("  -- Invalid selection. Try again: ")
-
-        elif type(s) == int and s < 0:
-            return list(self.tc.values())[s]
+                ):
+                    return tc
+                
+            # return self.tc[
+                # list(self.tc.keys())[
+                    # (s-1) if s > 0 else s
+                # ]
+            # ]
         # List/Tuple (storm number, tcrecord index)
         elif type(s) in [tuple, list]:
             if len(s) == 1:
@@ -568,7 +555,7 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
                     if s.upper()[0] == name[0]:
                         return self.tc[atcfid]
 
-    def stats(self, year1=None, year2=None, start=None, thru=None, width=70, report_type=print, **kw):
+    def stats(self, year1=None, year2=None, start=None, thru=None, width=70, **kw):
         """Returns a report of a host of stats from the season and their ranks 
         relative to compared seasons. It also fully supports partial season
         stats (like rank_seasons_thru).
@@ -584,10 +571,6 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
             thru (None): accepts a 2-member tuple representing month and day;
                 the end month and day for the comparison.
             width (70): used to control the width of the report
-            report_type (print): controls the format of the seasonal stats
-                requested. By default, it prints out to the console. if <<str>>
-                (no quotations needed), it returns a stringified version of the
-                stats
 
         Keyword Arguments:
             descending: bool used to determine sorting method of rank results 
@@ -617,10 +600,8 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
             start = (1,1)
         if thru is None:
             thru = (12,31)
-        return getattr(
-            self._hd2,
-            "_season_stats" + ("_str" if report_type == str else "")
-        )(
+        
+        return self._hd2._season_stats(
             self.year,
             year1,
             year2,
@@ -671,17 +652,17 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
         print(" {:-^10} {:-^8} {:-^4} {:-^4} {:-^4}  {:-^6}  {:-^6}  {:-^6}  {:-^6}".format(
             "","","","","","","","",""
         ))
-        for tcid, trop in self.tc.items():
+        for trop in self.tc:
             print(" {:<10} {:8} {:^4} {:>4} {:>4}  {:>6.1f}  {:^6}  {:^6}  {:^6}".format(
-                trop.name.title(),
-                trop.atcfid,
-                trop.landfalls,
-                trop.minmslp if trop.minmslp != None else "N/A",
-                trop.maxwind if trop.maxwind > 0 else "N/A",
-                trop.track_distance_TC,
-                "{:>6.3f}".format(trop.ACE * math.pow(10,-4)) if trop.ACE > 0 else "--",
-                "{:>6.3f}".format(trop.HDP * math.pow(10,-4)) if trop.HDP > 0 else "--",
-                "{:>6.3f}".format(trop.MHDP * math.pow(10,-4)) if trop.MHDP > 0 else "--"
+                self.tc[trop].name.title(),
+                self.tc[trop].atcfid,
+                self.tc[trop].landfalls,
+                self.tc[trop].minmslp if self.tc[trop].minmslp != None else "N/A",
+                self.tc[trop].maxwind if self.tc[trop].maxwind > 0 else "N/A",
+                self.tc[trop].track_distance_TC,
+                "{:>6.3f}".format(self.tc[trop].ACE * math.pow(10,-4)) if self.tc[trop].ACE > 0 else "--",
+                "{:>6.3f}".format(self.tc[trop].HDP * math.pow(10,-4)) if self.tc[trop].HDP > 0 else "--",
+                "{:>6.3f}".format(self.tc[trop].MHDP * math.pow(10,-4)) if self.tc[trop].MHDP > 0 else "--"
             ))
         print("")
 
@@ -690,17 +671,6 @@ class Season(_aliases.SeasonAliases, _calculations.SeasonCalculations, _reports.
         for tc in self.tc.values():
             tc.hurdat2()
 
-    @property
-    def tc_entries(self):
-        """
-        Returns a temporally-ascending list of <<TCRecordEntry>>s of all
-        tropical cyclones occurring during the season.
-        """
-        return sorted([
-            en for tcid, TC in self.tc.items()
-            for en in TC.entry
-            if en.is_TC
-        ], key = lambda moment: moment.entrytime)
 
     @property
     def tracks(self):
@@ -846,13 +816,23 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
             re.search(r"'(.*)'", str(type(self)))[1],
             self.atcfid,
             self.name,
-            hex(id(self))[2:].upper().zfill(16)
+            str(id(self)).upper().zfill(16)
         )
 
     def __getitem__(self, indx):
-        return self.entry[
-            int(indx) if type(indx) not in [list, tuple] else indx[0]
-        ]
+        return self.entry[indx]
+
+    def coord_list(self):
+        """Prints a report of entry-dates and the corresponding latitude and
+        longitude of the storm's center position.
+        """
+        print("DATE, LAT, LON")
+        for trk in self.entry:
+            print("{:%Y-%m-%d %H:%M},{},{}".format(
+                trk.entrytime,
+                trk.location[0],
+                trk.location[1]
+            ))
 
     def stats(self):
         self.info()
@@ -905,7 +885,10 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
             ))
         print("* Started: {:%Y-%m-%d %H}Z".format(self.entry[0].entrytime))
         print("* Ended: {:%Y-%m-%d %H}Z".format(self.entry[-1].entrytime))
-        print("   - Life as Tropical Cyclone: {} days".format(self.duration))
+        print("   -Total Track Time: {} days, {} hours".format(
+            math.floor(int((self.entry[-1].entrytime - self.entry[0].entrytime).total_seconds()) / 60 / 60 / 24),
+            math.floor(int((self.entry[-1].entrytime - self.entry[0].entrytime).total_seconds()) / 60 / 60 % 24)
+        ))
         print("* Landfall: {}{}".format(
             "Yes" if self.landfalls > 0 else "None",
             ", {} Record{}".format(
@@ -935,16 +918,16 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
             "INDEX","DATE", "FALL", "LAT", "LON", "MSLP", "WIND", "STATUS"
         ))
         print(" {:-^5} {:-^14} {:-^4} {:-^5}  {:-^6}  {:-^4}  {:-^4}  {:-^6}".format("","","","","","","",""))
-        for en in self.entry:
+        for trk in self.entry:
             print(" {:^5} {:%Y-%m-%d %H}Z {:^4} {:5}  {:6}  {:4}  {:4}  {:^6}".format(
-                self.entry.index(en),
-                en.entrytime,
-                en.record_identifier if en.record_identifier == "L" else "",
-                en.lat_str,
-                en.lon_str,
-                en.mslp if en.mslp != None else "N/A",
-                en.wind,
-                en.status if en.wind < 96 else "MHU"
+                self.entry.index(trk),
+                trk.entrytime,
+                trk.record_identifier if trk.record_identifier == "L" else "",
+                trk.lat_str,
+                trk.lon_str,
+                trk.mslp if trk.mslp != None else "N/A",
+                trk.wind,
+                trk.status if trk.wind < 96 else "MHU"
             ))
         print("")
 
@@ -959,22 +942,11 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
             print(entry.hurdat2())
 
     @property
-    def tc_entries(self):
-        """
-        Returns a list of <<TCRecordEntry>>'s where the storm is designated a
-        tropical cyclone.
-        """
-        return [
-            en for en in self.entry
-            if en.is_TC
-        ]
-
-    @property
     def gps(self):
         """Return a list of tuples containing the gps coordinates of the
         tropical cyclone's track
         """
-        return [en.location for en in self.entry]
+        return [e.location for e in self.entry]
 
     @property
     def minmslp(self):
@@ -983,26 +955,19 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
 
         If insufficient data exists to determine MSLP, None will be returned.
         """
-        return min(
-            [en.mslp for en in self.entry if en.mslp != None],
-            default=None
-        )
+        return min([t.mslp for t in self.entry if t.mslp != None],default=None)
 
     @property
     def maxwind(self):
         """Returns the max peak-wind recorded during the life of the storm."""
-        return max(en.wind for en in self.entry)
+        return max([t.wind for t in self.entry])
 
     @property
     def landfalls(self):
         """Returns the QUANTITY of landfalls recorded made by the system
         as a tropical cyclone.
         """
-        return len([
-            "L" for en in self.entry
-            if en.record_identifier == "L"
-            and en.is_TC
-        ])
+        return len(["L" for t in self.entry if t.record_identifier == "L" and t.status in ["SD","TD","SS","TS","HU"]])
 
     @property
     def landfall_TC(self):
@@ -1016,11 +981,7 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
         """Bool indicating whether at-least one landfall was made while a
         tropical depression.
         """
-        return any(
-            en.record_identifier == "L"
-            for en in self.entry
-            if en.status in ["SD","TD"]
-        )
+        return any(t.record_identifier == "L" for t in self.entry if t.status in ["SD","TD"])
 
     @property
     def landfall_TS(self):
@@ -1028,22 +989,14 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
         tropical cyclone while designated as a tropical storm (TS) or
         sub-tropical storm (SS).
         """
-        return any(
-            en.record_identifier == "L"
-            for en in self.entry
-            if en.status in ["SS","TS"]
-        )
+        return any(t.record_identifier == "L" for t in self.entry if t.status in ["SS","TS"])
 
     @property
     def landfall_HU(self):
         """Bool indicating whether at-least one landfall was recorded by the
         tropical cyclone while designated as a Hurricane.
         """
-        return any(
-            en.record_identifier == "L"
-            for en in self.entry
-            if en.status == "HU"
-        )
+        return any(t.record_identifier == "L" for t in self.entry if t.status == "HU")
 
     @property
     def landfall_MHU(self):
@@ -1051,11 +1004,7 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
         tropical cyclone while a hurricane at major-hurricane strength
         (>= 96kts).
         """
-        return any(
-            en.record_identifier == "L"
-            for en in self.entry
-            if en.wind >= 96 and en.status == "HU"
-        )
+        return any(t.record_identifier == "L" for t in self.entry if t.wind >= 96 and t.status == "HU")
 
     @property
     def TSreach(self):
@@ -1072,35 +1021,35 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
         Atlantic HURDAT2, this occurrence happens, but virtually all storms of
         this nature occur before 1900.
         """
-        return any(en.status in ["TS","SS","HU"] for en in self.entry)
+        return any(t.status in ["TS","SS","HU"] for t in self.entry)
 
     @property
     def HUreach(self):
         """Bool indicating whether the storm was ever objectively designated as
         a hurricane (HU).
         """
-        return any(en.status == "HU" for en in self.entry)
+        return any(t.status == "HU" for t in self.entry)
 
     @property
     def MHUreach(self):
         """Bool indicating whether the storm ever reached major hurricane
         status (>= 96kts).
         """
-        return any(en.wind >= 96 for en in self.entry if en.status == "HU")
+        return any(t.wind >= 96 for t in self.entry if t.status == "HU")
 
     @property
     def cat45reach(self):
         """Returns a bool indicating if the tropical cyclone ever reached at-
         least Category 4 strength during its life.
         """
-        return any(en.wind >= 114 for en in self.entry if en.status == "HU")
+        return any(t.wind >= 114 for t in self.entry if t.status == "HU")
 
     @property
     def cat5reach(self):
         """Returns a bool indicating if the tropical cyclone ever reached
         Category 5 strength during its life.
         """
-        return any(en.wind >= 136 for en in self.entry if en.status == "HU")
+        return any(t.wind >= 136 for t in self.entry if t.status == "HU")
 
     @property
     def maxwind_mslp(self):
@@ -1139,23 +1088,21 @@ class TropicalCyclone(_aliases.TropicalCycloneAliases, _calculations.TropicalCyc
         """Returns a list of all designated statuses during the tropical
         cyclone's life.
         """
-        return list(set([
-            en.status for en in self.entry
-        ]))
+        return list(set([s.status for s in self.entry]))
 
     @property
     def status_highest(self):
         """
-        Returns a readable descriptor for the storm based on its highest-order
-        status designated.
-
+        Returns a readable descriptor for the storm based on its highest status
+        reached.
+        
         Examples
         -------
         TS -> 'Tropical Storm'
         HU -> 'Hurricane'
         HU and self.maxwind >= 96 -> 'Major Hurricane'
         """
-        order = ["HU", "TS", "SS", "TD", "SD", "EX", "LO", "DB"]
+        order = ["HU", "TS", "SS", "TD", "SD", "LO", "EX"]
         for status in order:
             if status in self.statuses_reached:
                 return format_status(status, self.maxwind)
@@ -1171,8 +1118,8 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
         "_wind", "_status_desc", "_mslp",
         "_tsNE", "_tsSE", "_tsSW", "_tsNW",
         "_ts50NE", "_ts50SE", "_ts50SW", "_ts50NW",
-        "_huNE", "_huSE", "_huSW", "_huNW", "_maxwind_radius",
-        "_tc", "_season", "_hd2", "_hurdat2line"
+        "_huNE", "_huSE", "_huSW", "_huNW", "_wind_radii",
+        "_tc", "_season", "_hd2"
     ]
 
     TCRecordLine = collections.namedtuple(
@@ -1182,94 +1129,52 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
             "latitude", "longitude", "wind", "mslp",
             "tsNE", "tsSE", "tsSW", "tsNW",
             "ts50NE", "ts50SE", "ts50SW", "ts50NW",
-            "huNE", "huSE", "huSW", "huNW", "maxwind_radius"
+            "huNE", "huSE", "huSW", "huNW", "wind_radii"
         ],
-        # defaults necessary to maintain backward compatibility
-        # This would be backward compatible
-        defaults = (None, None, None, None, None)
+        defaults = (None,)
     )
 
-    def __init__(self, tc_entry, hurdat2line, tcobj, seasonobj, hd2obj):
+    def __init__(self, tc_entry, tcobj, seasonobj, hd2obj):
 
-        tcentry = self.TCRecordLine(*tc_entry)
-
-        # The original hurdat2 line that this entry was created from
-        self._hurdat2line = hurdat2line
+        try:
+            tcentry = self.TCRecordLine(*tc_entry)
+        except:
+            print(tc_entry)
+            raise
 
         # Date
         self._entrytime = datetime.datetime(
-            int(tcentry[0][:4]),  #year
-            int(tcentry[0][4:6]), #month
-            int(tcentry[0][-2:]), #day
-            int(tcentry[1][:2]),
-            int(tcentry[1][-2:])
+            int(tcentry.day[:4]),
+            int(tcentry.day[4:6]),
+            int(tcentry.day[6:]),
+            int(tcentry.time[:2]),
+            int(tcentry.time[2:])
         )
 
-        self._record_identifier = tcentry[2] if tcentry[2] != '' else None
-        self._status = tcentry[3]
-        self._lat_str = tcentry[4]
-        self._lon_str = tcentry[5]
-        self._lat = coord_conv(self.lat_str)
-        self._lon = coord_conv(self.lon_str)
-        self._wind = int(tcentry[6])
-        self._status_desc = format_status(self.status, self.wind)
-        self._mslp = int(tcentry[7]) if tcentry[7] != '-999' else None
+        self._record_identifier = tc_entry[2] if tc_entry[2] != '' else None
+        self._status = tc_entry[3]
+        self._lat_str = tc_entry[4]
+        self._lon_str = tc_entry[5]
+        self._location = coord(self.lat_str,self.lon_str)
+        self._lat = self.location[0]
+        self._lon = self.location[1]
+        self._wind = int(tc_entry[6])
+        self._status_desc = format_status(self.status,self.wind)
+        self._mslp = int(tc_entry[7]) if tc_entry[7] != '-999' else None
         # Extent Indices - 0 = NE, 1 = SE, 2 = SW, 3 = NW
-        # Tropical Storm extents
-        self._tsNE = int(tcentry[8]) \
-            if tcentry[8] != "-999" \
-            else 0 if self._wind < 34 \
-            else None
-        self._tsSE = int(tcentry[9]) \
-            if tcentry[9] != "-999" \
-            else 0 if self._wind < 34 \
-            else None
-        self._tsSW = int(tcentry[10]) \
-            if tcentry[10] != "-999" \
-            else 0 if self._wind < 34 \
-            else None
-        self._tsNW = int(tcentry[11]) \
-            if tcentry[11] != "-999" \
-            else 0 if self._wind < 34 \
-            else None
-        # Gale extents
-        self._ts50NE = int(tcentry[12]) \
-            if tcentry[12] != "-999" \
-            else 0 if self._wind < 50 \
-            else None
-        self._ts50SE = int(tcentry[13]) \
-            if tcentry[13] != "-999" \
-            else 0 if self._wind < 50 \
-            else None
-        self._ts50SW = int(tcentry[14]) \
-            if tcentry[14] != "-999" \
-            else 0 if self._wind < 50 \
-            else None
-        self._ts50NW = int(tcentry[15]) \
-            if tcentry[15] != "-999" \
-            else 0 if self._wind < 50 \
-            else None
-        # Hurricane extents
-        self._huNE = int(tcentry[16]) \
-            if tcentry[16] != "-999" \
-            else 0 if self._wind < 64 \
-            else None
-        self._huSE = int(tcentry[17]) \
-            if tcentry[17] != "-999" \
-            else 0 if self._wind < 64 \
-            else None
-        self._huSW = int(tcentry[18]) \
-            if tcentry[18] != "-999" \
-            else 0 if self._wind < 64 \
-            else None
-        self._huNW = int(tcentry[19]) \
-            if tcentry[19] != "-999" \
-            else 0 if self._wind < 64 \
-            else None
-        self._maxwind_radius = int(tcentry[20]) \
-            if len(tcentry) >= 21 \
-            and tcentry[20] not in ["-999", None] \
-            else None
+        self._tsNE = int(tcentry.tsNE) if tcentry.tsNE != "-999" else None
+        self._tsSE = int(tcentry.tsSE) if tcentry.tsSE != "-999" else None
+        self._tsSW = int(tcentry.tsSW) if tcentry.tsSW != "-999" else None
+        self._tsNW = int(tcentry.tsNW) if tcentry.tsNW != "-999" else None
+        self._ts50NE = int(tcentry.ts50NE) if tcentry.ts50NE != "-999" else None
+        self._ts50SE = int(tcentry.ts50SE) if tcentry.ts50SE != "-999" else None
+        self._ts50SW = int(tcentry.ts50SW) if tcentry.ts50SW != "-999" else None
+        self._ts50NW = int(tcentry.ts50NW) if tcentry.ts50NW != "-999" else None
+        self._huNE = int(tcentry.huNE) if tcentry.huNE != "-999" else None
+        self._huSE = int(tcentry.huSE) if tcentry.huSE != "-999" else None
+        self._huSW = int(tcentry.huSW) if tcentry.huSW != "-999" else None
+        self._huNW = int(tcentry.huNW) if tcentry.huNW != "-999" else None
+        self._wind_radii = int(tcentry.wind_radii) if tcentry.wind_radii not in ["-999", None] else None
 
         # Record parent objects
         self._tc = tcobj
@@ -1283,113 +1188,18 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
             self._tc.name,
             self._tc.entry.index(self),
             self.date,
-            hex(id(self))[2:].upper().zfill(16)
+            str(id(self)).upper().zfill(16)
         )
 
-    @property
-    def location(self):
-        """
-        Returns a tuple of the latitude and longitude (in decimal degrees and
-        in that respective order) for this entry.
-        """
-        return (self.lat, self.lon)
-
-    @property
-    def location_reversed(self):
-        """
-        Returns a tuple of the longitude and latitude (in decimal degrees and
-        in that respective order) for this entry.
-
-        This was included as GIS programs seem to prefer this order.
-        """
-        return (self.lon, self.lat)
-
-    @property
-    def is_TC(self):
-        """Returns whether or not the storm was designated as a tropical
-        cyclone at the time of this <<TCRecordEntry>>.
-
-        The entry status must be one of the following: "SD", "TD", "SS", "TS", "HU".
-        """
-        return self.status in ["SD", "TD", "SS", "TS", "HU"]
-
-    @property
-    def is_synoptic(self):
-        """Returns whether or not the <<TCRecordEntry>>.entrytime is considered
-        to be synoptic.
-
-        To be True, it must have a recorded hour of 0Z, 6Z, 12Z, or 18Z 'on the
-        dot' (minute, second == 0).
-
-        This is helpful in calculating energy indices.
-        """
-        return self.hour in [0, 6, 12, 18] and self.minute == 0
-
-    @property
-    def previous_entries(self):
-        """
-        Returns a list of preceding <TCRecordEntry>s in the parent
-        <TropicalCyclone>.entry list.
-        """
-        return self._tc[0:self._tc.entry.index(self)]
-
-    @property
-    def previous_entry(self):
-        """
-        Returns the <TCRecordEntry> that occurred PREVIOUS (preceding this
-        entry) in the parent <TropicalCyclone>.entry list. Returns None if it
-        is the first index (index 0).
-        """
-        if self._tc.entry.index(self)-1 >= 0:
-            return self._tc[self._tc.entry.index(self)-1]
-        else:
-            return None
-
-    @property
-    def next_entries(self):
-        """
-        Returns a list of succeeding <TCRecordEntry>s in the parent
-        <TropicalCyclone>.entry list.
-        """
-        return self._tc[self._tc.entry.index(self)+1:]
-
-    @property
-    def next_entry(self):
-        """
-        Returns the <TCRecordEntry> that occurs NEXT (following this entry) in
-        the parent <TropicalCyclone>.entry list. Returns None if it is the last
-        entry.
-        """
-        try:
-            return self._tc[self._tc.entry.index(self)+1]
-        except:
-            return None
-
     def hurdat2(self):
-        """
-        Returns a string of a hurdat2-formatted line of the entry information.
-
-        A few minor differences will exist between this output and the actual
-        line found in the hurdat2 database. If using an older hurdat2 database
-        (prior to 2022 release), it won't have maxwind radii available. Though
-        this field is not part of that older database, this method will report
-        it as null ('-999'). Also, wind extent information will likely be
-        different. This is because upon ingest, this module infers non-
-        applicable wind-extents as 0. For example, a tropical storm, having
-        winds < 64kt, will objectively have a hurricane wind-extent as 0, where
-        for storms prior to 2004, the database would say '-999'.
-
-        One other possible difference would occur if this version of the module
-        is used with future hurdat2 databases that include more variables
-        (which this version of the module would be oblivious to).
-
-        To see the line that the data for this entry was formulated from, use
-        the method hurdat2orig()
+        """Returns a string of a hurdat2-formatted line of the entry
+        information. It should be identical to the corresponding entry in the
+        actual Hurdat2 record.
         """
         return "{:>8},{:>5},{:>2},{:>3},{:>6},{:>7},{:>4},{:>5},".format(
             "{:%Y%m%d}".format(self.entrytime),
             "{:%H%M}".format(self.entrytime),
-            "" if self.record_identifier != "L" else "L",
+            "" if self.record_identifier is not "L" else "L",
             self.status,
             self.lat_str,
             self.lon_str,
@@ -1401,41 +1211,20 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
             *[quad if quad is not None else -999 for quad in self.extent_TS50]
         ) + "{:>5},{:>5},{:>5},{:>5},".format(
             *[quad if quad is not None else -999 for quad in self.extent_HU]
-        ) + "{:>5},".format(self.maxwind_radius if self.maxwind_radius is not None else -999)
+        )
 
+def coord(strlat,strlon):
+    """Method used typically only on read-in of data to convert a Hurdat2-
+    formatted lat/lon coordinate into a float representation of the information
+    and return it.
 
-    def hurdat2orig(self):
-        """
-        Returns a carbon-copy of the line from the hurdat2 database that this
-        entry was formed from.
-        """
-        return self._hurdat2line
-
-    @property
-    def extent_TS(self):
-        return [self.tsNE, self.tsSE, self.tsSW, self.tsNW]
-
-    @property
-    def extent_TS50(self):
-        return [self.ts50NE, self.ts50SE, self.ts50SW, self.ts50NW]
-
-    @property
-    def extent_HU(self):
-        return [self.huNE, self.huSE, self.huSW, self.huNW]
-
-def coord_conv(coordstr):
+    Example: coord("26.1N", "88.9W") -->  (26.1, -88.9)
     """
-    Takes a hurdat2-formatted lat/lon coordinate and returns a float
-    representation thereof.
-
-    Example:
-        coord_conv("26.1N") -->  26.1
-        coord_conv("98.6W") -->  -98.6
-    """
-    if coordstr[-1] in ["N", "E"]:
-        return round(float(coordstr[:-1]), 1)
-    else:
-        return round(-1 * float(coordstr[:-1]), 1)
+    if strlat[-1] == "N": decimal_lat = round(float(strlat[:-1]),1)
+    else: decimal_lat = round(-1 * float(strlat[:-1]),1)
+    if strlon[-1] == "E": decimal_lon = round(float(strlon[:-1]),1)
+    else: decimal_lon = round(-1 * float(strlon[:-1]),1)
+    return (decimal_lat, decimal_lon)
 
 def format_record_identifier(ri):
     """Returns a description about an entry's record_identifier.
@@ -1452,7 +1241,7 @@ def format_record_identifier(ri):
     elif ri == "T": return "Provides additional detail on the track (position) of the cyclone"
     else: return "* No Description Available *"
 
-def format_status(status, wind):
+def format_status(status,wind):
     """Returns a description about a record's 2-letter status.
 
     Definitions/interpretations found in hurdat2-format pdf found online.

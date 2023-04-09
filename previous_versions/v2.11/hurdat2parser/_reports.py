@@ -1,207 +1,25 @@
 import operator
 import json
+import shapefile
+import geojson
 import statistics
 import math
 import os
-import re
 import csv
 import itertools
 import collections
 
-try:
-    import shapefile
-except:
-    print("* Error attempting to import shapefile")
-
-try:
-    import geojson
-except:
-    print("* Error attempting to import geojson")
-
 from . import _calculations
 from . import _maps
 
-try:
-    import matplotlib
-    import matplotlib.style as mplstyle
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as _ticker
-    import matplotlib.dates as _dates
-    import matplotlib.figure as _figure
-    import matplotlib.patches as _patches
-except Exception as e:
-    print("* Error attempting to import matplotlib: {}".format(e))
-
-CSV_VARS = [
-    ('TC Qty', 'tracks'),
-    # ('Trk Dist', 'track_distance'),
-    ('Landfalls (Acc.)', 'landfalls'),
-    ('TC Trk Dist', 'track_distance_TC'),
-    ('TC Landfall', 'landfall_TC'),
-    ('TS', 'TSreach'),
-    ('TS Landfall', 'landfall_TS'),
-    ('ACE', 'ACE'),
-    ('TS Trk Dist', 'track_distance_TS'),
-    ('TS-Excl', 'TSonly'),
-    ('HU', 'HUreach'),
-    ('HU Landfall', 'landfall_HU'),
-    ('HDP', 'HDP'),
-    ('HU Trk Dist', 'track_distance_HU'),
-    ('HU-1and2', 'HUonly'),
-    ('MHU', 'MHUreach'),
-    ('MHU Landfall', 'landfall_MHU'),
-    ('MHDP', 'MHDP'),
-    ('MHU Trk Dist', 'track_distance_MHU'),
-    ('Cat 4 and 5 Qty', 'cat45reach'),
-    ('Cat 5 Qty', 'cat5reach'),
-]
-
-CSV_CLIMO_VARS = [('Climatology', "era")] + CSV_VARS
-
-CSV_SEASON_VARS = [
-    ('Year', 'year'),
-    ('Duration (days)', 'duration'),
-    ('Start Ordinal', 'start_ordinal'),
-    ('End Ordinal', 'end_ordinal'),
-] + CSV_VARS
-
-CSV_TC_VARS = [
-    ('Year', 'year'),
-    ('ATCF Num', 'atcf_num'),
-    ('ATCF Id', 'atcfid'),
-    ('Name', 'name'),
-    ('Duration (days) as TC', 'duration_TC'),
-    ('Start Ordinal', 'start_ordinal'),
-    ('End Ordinal', 'end_ordinal'),
-    ('Min MSLP', 'minmslp'),
-    ('Max Wind', 'maxwind'),
-    ('Highest Status Reached', 'status_highest'),
-] + [
-    VAR for VAR in CSV_VARS[1:]
-    if "only" not in VAR[-1]
-    and "reach" not in VAR[-1]
-]
-
-Era = collections.namedtuple(
-    "Era",
-    [attr for desc, attr in CSV_CLIMO_VARS]
-)
-
-class ClimateEra(object):
-    def __init__(self, **kw):
-        self.__dict__.update(**kw)
+import matplotlib
+import matplotlib.pyplot as plt
+import matplotlib.ticker as _ticker
+import matplotlib.dates as _dates
+import matplotlib.figure as _figure
+import matplotlib.patches as _patches
 
 class Hurdat2Reports:
-
-    def multi_season_info(self, year1=None, year2=None):
-        """Grab a chunk of multi-season data and report on that climate era.
-        This method can be viewed as a climatological era info method.
-        
-        Default Arguments:
-            year1 (None): The start year
-            year2 (None): The end year
-        """
-
-        year1 = self.record_range[0] if year1 is None \
-            or year1 < self.record_range[0] else year1
-        year2 = self.record_range[1] if year2 is None \
-            or year2 > self.record_range[1] else year2
-        # ---------------------
-
-        yrrange = range(year1, year2+1)
-        clmt = ClimateEra(
-            era = (year1, year2),
-            tracks = sum(self.season[s].tracks for s in yrrange),
-            landfalls = sum(self.season[s].landfalls for s in yrrange),
-            landfall_TC = sum(self.season[s].landfall_TC for s in yrrange),
-            landfall_TD = sum(self.season[s].landfall_TD for s in yrrange),
-            landfall_TS = sum(self.season[s].landfall_TS for s in yrrange),
-            landfall_HU = sum(self.season[s].landfall_HU for s in yrrange),
-            landfall_MHU = sum(self.season[s].landfall_MHU for s in yrrange),
-            TSreach = sum(self.season[s].TSreach for s in yrrange),
-            TSonly = sum(self.season[s].TSonly for s in yrrange),
-            HUreach = sum(self.season[s].HUreach for s in yrrange),
-            HUonly = sum(self.season[s].HUonly for s in yrrange),
-            MHUreach = sum(self.season[s].MHUreach for s in yrrange),
-            cat45reach = sum(self.season[s].cat45reach for s in yrrange),
-            cat5reach = sum(self.season[s].cat5reach for s in yrrange),
-            track_distance = sum(self.season[s].track_distance for s in yrrange),
-            track_distance_TC = sum(self.season[s].track_distance_TC for s in yrrange),
-            track_distance_TS = sum(self.season[s].track_distance_TS for s in yrrange),
-            track_distance_HU = sum(self.season[s].track_distance_HU for s in yrrange),
-            track_distance_MHU = sum(self.season[s].track_distance_MHU for s in yrrange),
-            ACE = sum(self.season[s].ACE for s in yrrange),
-            HDP = sum(self.season[s].HDP for s in yrrange),
-            MHDP = sum(self.season[s].MHDP for s in yrrange)
-        )
-
-        # Print Report
-        totalyrs = year2 - year1 + 1
-        print("")
-        print(" --------------------------------------------------------")
-        print(" Tropical Cyclone Season Stats, for {} to {}".format(year1, year2))
-        print(" --------------------------------------------------------")
-        print(" {:^56}".format(
-            "* Distances in nmi; * Energy Indices in 10**(-4) kt^2"
-        ))
-        print(" --------------------------------------------------------")
-        print(" Avg Track Qty (Total): {}/yr ({})".format(
-            round(clmt.tracks / totalyrs,1),
-            clmt.tracks
-        ))
-        print(" Avg TC Track Distance (Total): {}/yr ({})".format(
-            round(clmt.track_distance_TC / totalyrs,1),
-            round(clmt.track_distance_TC,1)
-        ))
-        print(" Avg TS Qty (Total): {}/yr ({})".format(
-            round(clmt.TSreach / totalyrs,1),
-            clmt.TSreach
-        ))
-        print("   -- Avg TS Track Distance (Total): {}/yr ({})".format(
-            round(clmt.track_distance_TS / totalyrs,1),
-            round(clmt.track_distance_TS,1)
-        ))
-        print("   -- Avg ACE (Total): {}/yr ({})".format(
-            round(clmt.ACE * 10**(-4) / totalyrs,1),
-            round(clmt.ACE * 10**(-4),1)
-        ))
-        print(" Avg HU Qty (Total): {}/yr ({})".format(
-            round(clmt.HUreach / totalyrs,1),
-            clmt.HUreach
-        ))
-        print("   -- Avg HU Track Distance (Total): {}/yr ({})".format(
-            round(clmt.track_distance_HU / totalyrs,1),
-            round(clmt.track_distance_HU,1)
-        ))
-        print("   -- Avg HDP (Total): {}/yr ({})".format(
-            round(clmt.HDP * 10**(-4) / totalyrs,1),
-            round(clmt.HDP * 10**(-4),1)
-        ))
-        print(" Avg MHU Qty (Total): {}/yr ({})".format(
-            round(clmt.MHUreach / totalyrs,1),
-            clmt.MHUreach
-        ))
-        print(" Avg Cat-4 and Cat-5 Qty (Total): {}/yr ({})".format(
-            round(clmt.cat45reach / totalyrs,1),
-            clmt.cat45reach
-        ))
-        print(" Avg Cat-5 Qty (Total): {}/yr ({})".format(
-            round(clmt.cat5reach / totalyrs,1),
-            clmt.cat5reach
-        ))
-        print("   -- Avg MHU Track Distance (Total): {}/yr ({})".format(
-            round(clmt.track_distance_MHU / totalyrs,1),
-            round(clmt.track_distance_MHU,1)
-        ))
-        print("   -- Avg MHDP (Total): {}/yr ({})".format(
-            round(clmt.MHDP * 10**(-4) / totalyrs,1),
-            round(clmt.MHDP * 10**(-4),1)
-        ))
-        print(" Avg Landfalling System Qty (Total): {}/yr ({})".format(
-            round(clmt.landfall_TC / totalyrs,1),
-            clmt.landfall_TC
-        ))
-        print("")
 
     def output_climo(self, climo_len=30):
         """Output a csv of stats from all climatological eras from the record
@@ -212,9 +30,12 @@ class Hurdat2Reports:
             climo_len (30): The length of time in years each climate era will
                 be assessed.
         """
+        class LAMBDA_CLASS:
+            def __init__(self, **kw):
+                self.__dict__ = kw
 
         ofn = "{}_HURDAT2_{}-yr_climatology.csv".format(
-            "".join(self.basin_abbr()),
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC",
             climo_len
         )
         
@@ -225,33 +46,93 @@ class Hurdat2Reports:
             )
             if choice.lower()[0] != "y": return None
         print("** PLEASE WAIT; THIS MAY TAKE A MOMENT **")
+        # climo = self.rank_climo(10,"tracks",climatology=climo_len,increment=1,op=True)
 
-        year1, year2 = self.record_range
+        # ---------------------
+        Era = collections.namedtuple(
+            "Era",
+            [
+                "era", "tracks", "landfalls", "landfall_TC", "landfall_TD",
+                "landfall_TS", "landfall_HU", "landfall_MHU", "TSreach",
+                "TSonly", "HUreach", "HUonly", "MHUreach", "cat45reach",
+                "cat5reach", "track_distance", "track_distance_TC",
+                "track_distance_TS", "track_distance_HU", "track_distance_MHU",
+                "ACE", "HDP", "MHDP"
+            ]
+        )
+
+        year1 = self.record_range[0]
+        year2 = self.record_range[1]
         climo = {}
-        for yr1, yr2 in [
-            (y, y+climo_len-1) \
-            for y in range(year1, year2+1) \
-            if year1 <= y <= year2 \
-            and year1 <= y+climo_len-1 <= year2
-        ]:
+        for yr1, yr2 in [(y, y+climo_len-1) \
+                for y in range(year1, year2+1) \
+                if year1 <= y <= year2 \
+                and year1 <= y+climo_len-1 <= year2]:
             climo[yr1, yr2] = Era(
-                *(
-                    [(yr1, yr2)] + [
-                        sum(getattr(self.season[s], attr)
-                        for s in range(yr1, yr2+1))
-                        for desc, attr in CSV_CLIMO_VARS[1:]
-                    ]
-                )
+                (yr1, yr2),
+                sum(self.season[s].tracks for s in range(yr1, yr2+1)),
+                sum(self.season[s].landfalls for s in range(yr1, yr2+1)),
+                sum(self.season[s].landfall_TC for s in range(yr1, yr2+1)),
+                sum(self.season[s].landfall_TD for s in range(yr1, yr2+1)),
+                sum(self.season[s].landfall_TS for s in range(yr1, yr2+1)),
+                sum(self.season[s].landfall_HU for s in range(yr1, yr2+1)),
+                sum(self.season[s].landfall_MHU for s in range(yr1, yr2+1)),
+                sum(self.season[s].TSreach for s in range(yr1, yr2+1)),
+                sum(self.season[s].TSonly for s in range(yr1, yr2+1)),
+                sum(self.season[s].HUreach for s in range(yr1, yr2+1)),
+                sum(self.season[s].HUonly for s in range(yr1, yr2+1)),
+                sum(self.season[s].MHUreach for s in range(yr1, yr2+1)),
+                sum(self.season[s].cat45reach for s in range(yr1, yr2+1)),
+                sum(self.season[s].cat5reach for s in range(yr1, yr2+1)),
+                sum(self.season[s].track_distance for s in range(yr1, yr2+1)),
+                sum(self.season[s].track_distance_TC for s in range(yr1, yr2+1)),
+                sum(self.season[s].track_distance_TS for s in range(yr1, yr2+1)),
+                sum(self.season[s].track_distance_HU for s in range(yr1, yr2+1)),
+                sum(self.season[s].track_distance_MHU for s in range(yr1, yr2+1)),
+                sum(self.season[s].ACE for s in range(yr1, yr2+1)),
+                sum(self.season[s].HDP for s in range(yr1, yr2+1)),
+                sum(self.season[s].MHDP for s in range(yr1, yr2+1))
             )
+
+        # --------------------------------
 
         with open(ofn, "w", newline="") as w:
             out = csv.writer(w)
-            out.writerow([desc for desc, attr in CSV_CLIMO_VARS])
+            out.writerow([
+                "Climatology", "TC Qty", "Trk Dist", "Landfalls (Acc.)",
+                "TC Landfall", "TS Landfall", "HU Landfall", "MHU Landfall",
+                "TC Trk Dist", "TS", "ACE", "TS Trk Dist", "TS-Excl", "HU",
+                "HDP", "HU Trk Dist", "HU-1and2", "MHU", "Cat 4 and 5 Qty",
+                "Cat 5 Qty", "MHDP", "MHU Trk Dist"
+            ])
             for clmt in climo.values():
-                out.writerow(
-                    ["{}-{}".format(*clmt.era)] \
-                  + [getattr(clmt, attr) for desc, attr in CSV_CLIMO_VARS[1:]]
-                )
+                out.writerow([
+                    "{}-{}".format(
+                        clmt.era[0],
+                        clmt.era[1]
+                    ),
+                    clmt.tracks,
+                    clmt.track_distance,
+                    clmt.landfalls,
+                    clmt.landfall_TC,
+                    clmt.landfall_TS,
+                    clmt.landfall_HU,
+                    clmt.landfall_MHU,
+                    clmt.track_distance_TC,
+                    clmt.TSreach,
+                    clmt.ACE,
+                    clmt.track_distance_TS,
+                    clmt.TSonly,
+                    clmt.HUreach,
+                    clmt.HDP,
+                    clmt.track_distance_HU,
+                    clmt.HUonly,
+                    clmt.MHUreach,
+                    clmt.cat45reach,
+                    clmt.cat5reach,
+                    clmt.MHDP,
+                    clmt.track_distance_MHU
+                ])
 
     def output_seasons_csv(self):
         """Output a csv of season-based stats from the record. In general, this
@@ -260,15 +141,39 @@ class Hurdat2Reports:
         HURDAT2 record.
         """
         ofn = "{}_HURDAT2_seasons_summary.csv".format(
-            "".join(self.basin_abbr())
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC"
         )
         with open(ofn, "w", newline="") as w:
             out = csv.writer(w)
-            out.writerow([desc for desc, attr in CSV_SEASON_VARS])
-            for y in self.season.values():
-                out.writerow(
-                    [getattr(y, attr) for desc, attr in CSV_SEASON_VARS]
-                )
+            out.writerow([
+                "Year", "TC Qty", "Trk Dist", "Landfalls (Acc.)",
+                "TC Landfall", "TS Landfall", "HU Landfall", "MHU Landfall",
+                "TC Trk Dist", "TS", "ACE", "TS Trk Dist", "TS-Excl", "HU",
+                "HDP", "HU Trk Dist", "HU-1and2", "MHU", "MHDP", "MHU Trk Dist"
+            ])
+            for y in [YR[1] for YR in self.season.items()]:
+                out.writerow([
+                    y.year,
+                    y.tracks,
+                    y.track_distance,
+                    y.landfalls,
+                    y.landfall_TC,
+                    y.landfall_TS,
+                    y.landfall_HU,
+                    y.landfall_MHU,
+                    y.track_distance_TC,
+                    y.TSreach,
+                    y.ACE,
+                    y.track_distance_TS,
+                    y.TSonly,
+                    y.HUreach,
+                    y.HDP,
+                    y.track_distance_HU,
+                    y.HUonly,
+                    y.MHUreach,
+                    y.MHDP,
+                    y.track_distance_MHU
+                ])
 
     def output_storms_csv(self):
         """Output a csv of individual storm-based stats from the record. In
@@ -277,31 +182,50 @@ class Hurdat2Reports:
         annual release of the HURDAT2 record.
         """
         ofn = "{}_HURDAT2_storms_summary.csv".format(
-            "".join(self.basin_abbr())
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC"
         )
         with open(ofn, "w", newline="") as w:
             out = csv.writer(w)
-            out.writerow([desc for desc, attr in CSV_TC_VARS])
-            for tc in self.tc.values():
-                out.writerow(
-                    [getattr(tc, attr) for desc, attr in CSV_TC_VARS]
-                )
+            out.writerow([
+                "Year", "ATCF Num", "ATCF ID", "Name", "Start Time",
+                "End Time", "HD2 Entries", "Min MSLP", "Max Wind", "Trk Dist",
+                "(Qty) Landfalls", "TD Landfall", "TS Landfall", "HU Landfall", 
+                "MHU Landfall", "Statuses", "TC Trk Dist", "TS Trk Dist",
+                "ACE", "TS Date", "HU Trk Dist", "HDP", "HU Date",
+                "MHU Trk Dist", "MHDP", "MHU Date"
+            ])
+            for TC in [tc[1] for tc in self.tc.items()]:
+                out.writerow([
+                    TC.year,
+                    int(TC.atcfid[2:4]),
+                    TC.atcfid,
+                    TC.name,
+                    TC.entry[0].entrytime,
+                    TC.entry[-1].entrytime,
+                    len(TC.entry),
+                    TC.minmslp,
+                    TC.maxwind if TC.maxwind > 0 else None,
+                    TC.track_distance,
+                    TC.landfalls,
+                    1 if TC.landfall_TD is True else 0,
+                    1 if TC.landfall_TS is True else 0,
+                    1 if TC.landfall_HU is True else 0,
+                    1 if TC.landfall_MHU is True else 0,
+                    ", ".join(TC.statuses_reached),
+                    TC.track_distance_TC,
+                    TC.track_distance_TS,
+                    TC.ACE,
+                    min([en.entrytime for en in TC.entry if en.status in ("SS","TS","HU")], default=None),
+                    TC.track_distance_HU,
+                    TC.HDP,
+                    min([en.entrytime for en in TC.entry if en.status in ("HU")], default=None),
+                    TC.track_distance_MHU,
+                    TC.MHDP,
+                    min([en.entrytime for en in TC.entry if en.status in ("HU") and en.wind >= 96], default=None)
+                ])
 
     def climograph(self, attr, climatology=30, increment=5, **kw):
-        """Returns a basic climatological graph.
-
-        Args:
-            attr: the attribute wanted to graph
-
-        Default Keyword Arguments:
-            climatology (30): the length in years that a climatology should be
-                assessed.
-            increment (5): The temporal frequency of assessment of a
-                climatology (in years).
-
-        Keyword Arguments:
-            year1: the start year for assessment
-            year2: the end year for assessment
+        """zxcv
         """
         _w, _h = _figure.figaspect(kw.get("aspect_ratio", 3/5))
         fig = plt.figure(
@@ -329,8 +253,7 @@ class Hurdat2Reports:
             )
         )
         ax = plt.axes(
-            xlabel = "Climate Era",
-            ylabel = attr
+            
         )
         ax.plot(
             [
@@ -354,6 +277,7 @@ class Hurdat2Reports:
             ]
         )
 
+        self.rc = matplotlib.rcParams
         ax.xaxis.set_tick_params(
             rotation = 90
         )
@@ -369,7 +293,7 @@ class SeasonReports:
         """
         ofn = "{}_{}_tracks".format(
             self.year,
-            "".join(self._hd2.basin_abbr())
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC"
         )
         with shapefile.Writer(ofn,shapeType=3) as gis:
             gis.field("ATCFID","C","8")
@@ -414,7 +338,7 @@ class SeasonReports:
         """
         ofn = "{}_{}_tracks_segmented".format(
             self.year,
-            "".join(self._hd2.basin_abbr())
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC"
         )
         c = itertools.count(0)
         with shapefile.Writer(ofn,shapeType=3) as gis:
@@ -465,7 +389,7 @@ class SeasonReports:
         """
         ofn = "{}_{}_tracks.geojson".format(
             self.year,
-            "".join(self._hd2.basin_abbr())
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC"
         )
         # Ensure indention is an int
         INDENT = int(INDENT)
@@ -509,7 +433,7 @@ class SeasonReports:
         """
         ofn = "{}_{}_tracks_segmented.geojson".format(
             self.year,
-            "".join(self._hd2.basin_abbr())
+            "ATL" if list(self.tc.keys())[0][:2] == "AL" else "PAC"
         )
 
         # Ensure indention is an int
@@ -643,43 +567,19 @@ class TropicalCycloneReports:
             labels (bool): toggle for temporal labels for entries; defaults to
                 True.
             linewidth (float): the line-width of the track; defaults to 1.5.
-            markersize (float): the entry-marker size; defaults to 3.
-            legend (bool): whether or not you want to display a legend (default
-                is True).
+            markersize (float): the entry-marker size; defaults to 2.
         """
-        matplotlib.rcParams['path.simplify_threshold'] = 1
-        # _w, _h = _figure.figaspect(kw.get("aspect_ratio", 3/4))
+        _w, _h = _figure.figaspect(kw.get("aspect_ratio", 3/4))
         fig = plt.figure(
-            # figsize = (_w, _h),
+            figsize = (_w, _h),
             constrained_layout = True,
         )
-        figman = plt.get_current_fig_manager()
-        figman.set_window_title(
+        plt.get_current_fig_manager().set_window_title(
             "{} - {} Tracks".format(
                 self.atcfid,
                 self.name
             )
         )
-        MIN_SCREEN_DIM = "height" \
-            if figman.window.winfo_screenheight() < figman.window.winfo_screenwidth() \
-            else "width"
-
-        # set figure dimensions with a 4:3 aspect ratio
-        if MIN_SCREEN_DIM == "height":
-            fig.set_figheight(
-                figman.window.winfo_screenmmheight() / 25.4 - 2
-            )
-            fig.set_figwidth(
-                fig.get_figheight() * 1 / kw.get("aspect_ratio", 3/4)
-            )
-        else:
-            fig.set_figwidth(
-                figman.window.winfo_screenmmwidth() / 25.4 - 2
-            )
-            fig.set_figheight(
-                fig.get_figwidth() * kw.get("aspect_ratio", 3/4)
-            )
-
         fig.suptitle("Tracks for {} - {}".format(
             "{} {} ({})".format(
                 self.status_highest,
@@ -703,8 +603,6 @@ class TropicalCycloneReports:
                 self.entry[-1].time
             )
         ))
-
-
         rc = matplotlib.rcParams
         ax = plt.axes(
             facecolor = kw.get("ocean", "lightblue")
@@ -719,10 +617,6 @@ class TropicalCycloneReports:
         ax.xaxis.set_major_locator(_ticker.MultipleLocator(5))
         ax.xaxis.set_minor_locator(_ticker.MultipleLocator(1))
         labelrot = 0    # initialization for label rotation
-
-        #Legend Objects list
-        legend_objects = []
-
         for indx, entry in enumerate(self.entry):
             if entry != self.entry[-1]:
                 labelangle = math.degrees(
@@ -738,33 +632,18 @@ class TropicalCycloneReports:
                        (-45 if -170 < labelangle <= -135 else labelangle - 90)
                 halign = "left" if 0 <= labelrot <= 90 else "right"
                 # print(entry.time, labelangle, labelrot, halign)
-                line2dobj_list = ax.plot(
+                ax.plot(
                     [entry.lon, self.entry[indx + 1].lon],
                     [entry.lat, self.entry[indx +1].lat],
-                    "-" if entry.is_TC else ":",
+                    "-" if entry.status in ["SD", "TD", "SS", "TS", "HU"] else ":",
                     color = "hotpink" if entry.saffir_simpson == 5 else \
-                         "purple" if entry.saffir_simpson == 4 else \
-                         "red" if entry.saffir_simpson == 3 else \
-                         "orange" if entry.saffir_simpson == 2 else \
-                         "yellow" if entry.saffir_simpson == 1 else \
-                         "green" if entry.saffir_simpson == 0 else \
-                         "black",
-                    marker = ".",
-                    markersize = kw.get("markersize", 3),
-                    markeredgecolor = "black",
-                    markerfacecolor = "black",
+                         ("purple" if entry.saffir_simpson == 4 else \
+                         ("red" if entry.saffir_simpson == 3 else \
+                         ("orange" if entry.saffir_simpson == 2 else \
+                         ("yellow" if entry.saffir_simpson == 1 else \
+                         ("green" if entry.saffir_simpson == 0 else "black"))))),
                     linewidth = kw.get("linewidth", rc["lines.linewidth"]),
-                    label = "Category {}".format(entry.saffir_simpson) \
-                        if entry.saffir_simpson > 0 and entry.status == "HU" else \
-                        "Tropical Storm" \
-                        if entry.saffir_simpson == 0 and entry.status in ["SS", "TS"] else \
-                        "Tropical Depression" \
-                        if entry.saffir_simpson < 0 and entry.status in ["SD", "TD"] else \
-                        "Non-Tropical Cyclone",
                 )
-                # Add a label to the legend if one doesn't exist already
-                if any(line2dobj_list[0].get_label() == line2dobj.get_label() for line2dobj in legend_objects) is False:
-                    legend_objects.extend(line2dobj_list)
             # from ._calculations import distance_from_coordinates
             # TS Radius
             # w = _patches.Wedge(
@@ -785,6 +664,14 @@ class TropicalCycloneReports:
                 # zorder=10
             # )
 
+            # Status points
+            ax.plot(
+                entry.lon,
+                entry.lat,
+                "o",
+                color = "black",
+                markersize = kw.get("markersize", 2),
+            )
             if kw.get("labels", True):
                 if entry.record_identifier == "L":
                     ax.annotate(
@@ -823,51 +710,29 @@ class TropicalCycloneReports:
                     )
         ax.grid(True, color=(0.3, 0.3, 0.3))
         ax.grid(True, which="minor", color=(0.6, 0.6, 0.6), linestyle=":")
+        # print(ax.get_ylim(), ax.get_xlim())
 
-        # set focus to the TC entries
-        ax.set_xlim([
-            min(en.lon for en in self.tc_entries) - 2,
-            max(en.lon for en in self.tc_entries) + 2,
-        ])
-        ax.set_ylim([
-            min(en.lat for en in self.tc_entries) - 2,
-            max(en.lat for en in self.tc_entries) + 2,
-        ])
-
-        # Set view-limits to be equal.
-        # *** THIS NEEDS TO BE DONE before maps are added. Once maps are added,
-        #     it places new limits. So to focus the end-result on the track,
-        #     the points are needed to be determined before any map is placed
-        # maxaxis == xaxis if longitudinal span >= latitudinal span, else yaxis
-
+        # Set view-limits to be equal
         maxaxis = ax.xaxis \
             if abs(operator.sub(*ax.get_xlim())) >= \
             abs(operator.sub(*ax.get_ylim())) else ax.yaxis
-        # multiply the span * the aspect-ratio
         maxaxis_diff = abs(operator.sub(*maxaxis.get_view_interval())) * (
             kw.get("aspect_ratio", 3/4) \
             if ax.xaxis == maxaxis \
             else (1 / kw.get("aspect_ratio", 3/4))
         )
-        # the final maxaxis interval
         maxaxis_interval = maxaxis.get_view_interval()
 
-        # minaxis == xaxis if longitudinal span < latitudinal span, else yaxis
         minaxis = ax.xaxis \
             if abs(operator.sub(*ax.get_xlim())) < \
             abs(operator.sub(*ax.get_ylim())) else ax.yaxis
         # minaxis_diff = abs(operator.sub(*minaxis.get_view_interval()))
-
-        # the final minaxis interval
-        # from the mid-point of the minaxis, add(subtract) half of the maxaxis_diff
-        # this will ensure "equidistant" nice layout of map
         minaxis_interval = [
             (statistics.mean(minaxis.get_view_interval()) + maxaxis_diff / 2),
             (statistics.mean(minaxis.get_view_interval()) - maxaxis_diff / 2)
         ]
 
         # Draw Map
-
         for atlas in [
             _maps.all_land,
             _maps.usa,
@@ -883,6 +748,23 @@ class TropicalCycloneReports:
                         edgecolor = "black",
                         linewidth = 0.5,
                     )
+        # for file in [
+            # "countrydb_all_land_minus_americas.json",
+            # "countrydb_centamerica.json",
+            # "countrydb_usafull.json",
+            # "countrydb_islands.json"
+        # ]:
+            # with open(file) as r:
+                # countrydata = json.loads(r.read())
+            # for country in countrydata:
+                # for polygon in country[1:]:
+                    # ax.fill(
+                        # [lon for lon, lat in polygon],
+                        # [lat for lon, lat in polygon],
+                        # color = kw.get("land", "lightseagreen"),
+                        # edgecolor = "black",
+                        # linewidth = 0.5,
+                    # )
 
         # Reset Intervals to the TC Track
         maxaxis.set_view_interval(
@@ -896,13 +778,7 @@ class TropicalCycloneReports:
             ignore=True
         )
 
-        # Legend
-        if kw.get("legend", True):
-            legend = plt.legend(
-                legend_objects,
-                [line2dobj.get_label() for line2dobj in legend_objects],
-                loc = "upper right",
-            )
-            legend.set_draggable(True)
-        mplstyle.use("fast")
         plt.show(block=False)
+
+def ___blah():
+    pass
