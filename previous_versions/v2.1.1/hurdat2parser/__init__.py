@@ -1,4 +1,4 @@
-"""hurdat2parser v2.11
+"""hurdat2parser v2.1.1
 
 https://github.com/ksgwxfan/hurdat2parser
 

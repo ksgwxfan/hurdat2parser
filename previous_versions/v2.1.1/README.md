@@ -1,5 +1,7 @@
-# hurdat2parser -- v2.11
+# hurdat2parser -- v2.1.1
 ---
+## This is a copy release of v2.11. I deleted that release and upload this one because PyPI was seeing v2.11 as newer than v2.2.
+
 ### *Interpreting the HURDAT2 Tropical Cyclone Dataset using Python*
 
 Hurdat2 ([https://www.nhc.noaa.gov/data/#hurdat](https://www.nhc.noaa.gov/data/#hurdat)) is a collection of records from individual Tropical Cyclones. The two primary Hurdat2 records are for the Atlantic (since 1850) and East/Central-Pacific Oceans (since 1949).
