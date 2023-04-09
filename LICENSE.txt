@@ -1,6 +1,6 @@
 MIT License
 
-hurdat2parser, Copyright (c) 2019-2022 Kyle S. Gentry
+hurdat2parser, Copyright (c) 2019-2023 Kyle S. Gentry
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
