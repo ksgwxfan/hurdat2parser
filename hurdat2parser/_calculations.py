@@ -17,7 +17,7 @@ blah = dict(
 class Hurdat2Calculations:
 
     def rank_seasons(self, quantity, stattr, year1=None, year2=None, descending=True, **kw):
-        """Rank and compare full tropical cyclone seasons to one another.
+        """Rank and compare full tropical cyclone seasons to one another. 
 
         Required Arguments:
             quantity: how long of a list of ranks do you want; an integer.
