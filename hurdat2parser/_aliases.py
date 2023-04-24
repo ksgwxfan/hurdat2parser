@@ -19,7 +19,7 @@ class SeasonAliases:
     def tc(self):
         return self._tc
 
-    # Energy Indices lower-case shortcuts 
+    # Energy Indices lower-case shortcuts
     @property
     def ace(self):
         return self.ACE

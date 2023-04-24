@@ -17,7 +17,7 @@ blah = dict(
 class Hurdat2Calculations:
 
     def rank_seasons(self, quantity, stattr, year1=None, year2=None, descending=True, **kw):
-        """Rank and compare full tropical cyclone seasons to one another. 
+        """Rank and compare full tropical cyclone seasons to one another.
 
         Required Arguments:
             quantity: how long of a list of ranks do you want; an integer.
@@ -817,7 +817,6 @@ class Hurdat2Calculations:
     def _season_stats_str(self, seasonreq, year1, year2, rstart, rthru, width, **kw):
         strlist = []
         yr = seasonreq
-        strlist.append("\n")
         strlist.append("-" * width)
         strlist.append("Tropical Cyclone Stats for {}".format(yr).center(width))
         strlist.append(
@@ -827,20 +826,19 @@ class Hurdat2Calculations:
             ).center(width)
         )
         strlist[-1] += "\n"
-        for line in textwrap.wrap(
-            "Stats calculated for Seasons {}".format(
-                "{}-{}".format(
-                    year1,
-                    year2
-                ) if year2 != self.record_range[1] \
-                else "since {} ({} total seasons)".format(
-                    year1,
-                    self.record_range[1] - year1 + 1
-                )
-            ),
-            width,
-        ):
-            strlist.append(line)
+
+        statyrline = "Stats calculated for Seasons {}".format(
+            "{}-{}".format(
+                year1,
+                year2
+            ) if year2 != self.record_range[1] \
+            else "since {} ({} total seasons)".format(
+                year1,
+                self.record_range[1] - year1 + 1
+            )
+        ).center(width)
+        strlist.append(statyrline)
+
         if rstart != (1,1) or rthru != (12,31):
             strlist.append(
                 "from {} thru {}".format(

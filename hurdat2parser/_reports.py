@@ -30,7 +30,7 @@ try:
     import matplotlib.figure as _figure
     import matplotlib.patches as _patches
 except Exception as e:
-    print("* Error attempting to import matplotlib:  {}".format(e))
+    print("* Error attempting to import matplotlib: {}".format(e))
 
 CSV_VARS = [
     ('TC Qty', 'tracks'),

@@ -4,10 +4,15 @@
 
 ### Contents
 
+- [v2.2.2](#v222)
 - [v2.2](#v22)
 - [v2.1.1](#v211)
 - [v2.1](#v21)
 - [v2.0.1](#v201)
+
+## v2.2.2
+- Hotfix for `<TCRecordEntry>` vars `previous_entries` and `next_entries`. These vars were introduced in `v2.2`. I thought I had confirmed that they worked, but I was getting issues with trying to call. Fixed now though.
+- small formatting tweak (wasn't throwing errors) of a (mostly) internal method `_season_stats_str`.
 
 ## v2.2
 - Docstring'd `TCRecordEntry` properties

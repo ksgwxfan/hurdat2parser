@@ -27,7 +27,7 @@ class Season:
             constrained_layout = True,
         )
         figman = plt.get_current_fig_manager()
-        # figman.set_window_title( 
+        # figman.set_window_title(
             # "{} - {} Tracks".format(
                 # self.atcfid,
                 # self.name

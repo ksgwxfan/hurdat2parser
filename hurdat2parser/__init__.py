@@ -1,4 +1,4 @@
-"""hurdat2parser v2.2 
+"""hurdat2parser v2.2.2
 
 https://github.com/ksgwxfan/hurdat2parser
 
@@ -1331,7 +1331,7 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
         Returns a list of preceding <TCRecordEntry>s in the parent
         <TropicalCyclone>.entry list.
         """
-        return self._tc[0:self._tc.entry.index(self)]
+        return self._tc.entry[0:self._tc.entry.index(self)]
 
     @property
     def previous_entry(self):
@@ -1351,7 +1351,7 @@ class TCRecordEntry(_aliases.TCEntryAliases, _calculations.TCEntryCalculations):
         Returns a list of succeeding <TCRecordEntry>s in the parent
         <TropicalCyclone>.entry list.
         """
-        return self._tc[self._tc.entry.index(self)+1:]
+        return self._tc.entry[self._tc.entry.index(self)+1:]
 
     @property
     def next_entry(self):
