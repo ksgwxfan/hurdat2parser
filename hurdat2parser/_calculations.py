@@ -401,7 +401,7 @@ class Hurdat2Calculations:
         if kw.get("info", None) is not None:
             if (year1 <= kw["info"] <= year2) is False:
                 ranks = sorted(
-                    ranks + [rseason[kw["info"]][stattr]],
+                    set(ranks + [rseason[kw["info"]][stattr]]),
                     reverse = descending
                 )
             return {

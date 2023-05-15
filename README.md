@@ -1,4 +1,4 @@
-# hurdat2parser -- v2.2.2
+# hurdat2parser -- v2.2.3
 ---
 ### *Interpreting the Hurdat2 Tropical Cyclone Dataset using Python*
 
@@ -9,7 +9,7 @@ The purpose of this module is to provide a quick way to analyze the Hurdat2 data
 PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hurdat2parser/)
 
 ## Contents
-* [Changes/Fixes in this Version (2.2)](#changes-in-this-version-22)
+* [Changes/Fixes in this Version (2.2.3)](#changes-in-this-version-223)
 * [Requirements, Installation, and getting the data](#installation)
 * [Importing the module](#importing-the-module)
 * [Example Calls](#example-calls)
@@ -21,10 +21,12 @@ PyPI Link: [https://pypi.org/project/hurdat2parser/](https://pypi.org/project/hu
 * [Credits](#credits)
 * [Copyright/License](#copyright)
 
-## Changes in this Version (2.2.2)
-
-- Hotfix for `<TCRecordEntry>` vars `previous_entries` and `next_entries`. These vars were introduced in `v2.2`. I thought I had confirmed that they worked, but I was getting issues with trying to call. Fixed now though.
-- small formatting tweak (wasn't throwing errors) of a (mostly) internal method `_season_stats_str`.
+## Changes in this Version (2.2.3)
+- Accounts for the possibility of typos/errors in the actual database.
+  - Notifies the user if a storm has already been ingested, but does overwrite the previous `TropicalCyclone` entry.
+  - Will skip a `TCRecordEntry` and notify the user if an error occurs whilst trying to generate it.
+- fix for `track_map()` to work for cyclones prior to 1900. There was an issue with the label formatting I was using.
+- fix for rankings for empty partial seasons in `rank_seasons_thru` where quantity of ranks were being returned as one too many.
 
 [&#8679; back to Contents](#contents)
 

@@ -4,11 +4,19 @@
 
 ### Contents
 
+- [v2.2.3](#v223)
 - [v2.2.2](#v222)
 - [v2.2](#v22)
 - [v2.1.1](#v211)
 - [v2.1](#v21)
 - [v2.0.1](#v201)
+
+## v2.2.3
+- Accounts for the possibility of typos/errors in the actual database.
+  - Notifies the user if a storm has already been ingested, but does overwrite the previous `TropicalCyclone` entry.
+  - Will skip a `TCRecordEntry` and notify the user if an error occurs whilst trying to generate it.
+- fix for `track_map()` to work for cyclones prior to 1900. There was an issue with the label formatting I was using.
+- fix for rankings for empty partial seasons in `rank_seasons_thru` where quantity of ranks were being returned as one too many.
 
 ## v2.2.2
 - Hotfix for `<TCRecordEntry>` vars `previous_entries` and `next_entries`. These vars were introduced in `v2.2`. I thought I had confirmed that they worked, but I was getting issues with trying to call. Fixed now though.

@@ -798,7 +798,7 @@ class TropicalCycloneReports:
                     ax.annotate(
                         "     {:{YMD}{HM}Z}".format(
                             entry.time,
-                            YMD = "%y/%m%d " \
+                            YMD = "%m-%d " \
                                 if (entry.hour, entry.minute) == (0,0) else "",
                             HM = "%H%M" if entry.minute != 0 else "%H"
                         ),
@@ -811,7 +811,7 @@ class TropicalCycloneReports:
                     ax.annotate(
                         " {:{YMD}%HZ}".format(
                             entry.time,
-                            YMD = "%y/%m%d " \
+                            YMD = "%m-%d " \
                                 if (entry.hour, entry.minute) == (0,0) else ""
                         ),
                         (entry.lon, entry.lat),

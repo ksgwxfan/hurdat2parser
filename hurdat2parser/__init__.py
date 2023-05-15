@@ -1,4 +1,4 @@
-"""hurdat2parser v2.2.2
+"""hurdat2parser v2.2.3
 
 https://github.com/ksgwxfan/hurdat2parser
 
@@ -28,6 +28,8 @@ License: MIT
 ksgwxfan.github.io
 echotops.blogspot.com
 """
+
+# in _calculations: added bounding_box and latitude/longitude bounds properties
 
 import calendar
 import difflib
@@ -275,7 +277,7 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
         else:
             _hd2data = hurdat2file.splitlines()
 
-        for line in _hd2data:
+        for indx, line in enumerate(_hd2data):
             lineparsed = re.split(r", *", re.sub(r", *$", "", line))
             # New Storm
             if re.search(r"^[A-Z]{2}\d{6}",lineparsed[0]):
@@ -284,6 +286,13 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
                 # Create Season
                 if tcyr not in self.season:
                     self.season[tcyr] = Season(tcyr, self)
+                # Duplicate storm in the database! Notify the user
+                if atcfid in self.tc:
+                    print(
+                        "* Data for`{}`".format(atcfid) \
+                        + " has already been ingested." \
+                        + " Overwriting will take place."
+                    )
                 # Create TropicalCyclone
                 self.tc[atcfid] = TropicalCyclone(
                     atcfid,
@@ -295,15 +304,19 @@ class Hurdat2(_aliases.Hurdat2Aliases, _calculations.Hurdat2Calculations, _repor
                 self.season[tcyr].tc[atcfid] = self.tc[atcfid]
             # TCRecordEntry for storm indicated
             else:
-                self.tc[atcfid].entry.append(
-                    TCRecordEntry(
-                        lineparsed.copy(),
-                        line,
-                        self.tc[atcfid],
-                        self.season[tcyr],
-                        self
+                try:
+                    self.tc[atcfid].entry.append(
+                        TCRecordEntry(
+                            lineparsed.copy(),
+                            line,
+                            self.tc[atcfid],
+                            self.season[tcyr],
+                            self
+                        )
                     )
-                )
+                except Exception as e:
+                    print("{}:".format(indx+1), line)
+                    print("*Error ingesting the line above: {}".format(e))
 
     def storm_name_search(self, searchname, info=True, feeling_lucky=False):
         """Search the Hurdat2 object's records by storm name. Returns the
