@@ -4,12 +4,16 @@
 
 ### Contents
 
+- [v2.2.3.1](#v2231)
 - [v2.2.3](#v223)
 - [v2.2.2](#v222)
 - [v2.2](#v22)
 - [v2.1.1](#v211)
 - [v2.1](#v21)
 - [v2.0.1](#v201)
+
+## v2.2.3.1
+- Hotfix for `<TropicalCyclone>.track_map()` that simply skips over `tkinter`-dependent lines upon error (will occur if user does not have `tkinter` installed).
 
 ## v2.2.3
 - Accounts for the possibility of typos/errors in the actual database.
