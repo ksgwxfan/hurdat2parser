@@ -1,5 +1,5 @@
 """
-hurdat2parser 2.2.3.1, Copyright (c) 2023, Kyle S. Gentry
+hurdat2parser 2.3.0.1, Copyright (c) 2024, Kyle S. Gentry
 
 MIT License
 
@@ -31,30 +31,24 @@ import re
 import csv
 import itertools
 import collections
+import sys
+import copy
 
-try:
-    import shapefile
-except:
-    print("* Error attempting to import shapefile")
+import shapefile
 
-try:
-    import geojson
-except:
-    print("* Error attempting to import geojson")
+import geojson
 
 from . import _calculations
+from . import _gis
 from . import _maps
 
-try:
-    import matplotlib
-    import matplotlib.style as mplstyle
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as _ticker
-    import matplotlib.dates as _dates
-    import matplotlib.figure as _figure
-    import matplotlib.patches as _patches
-except Exception as e:
-    print("* Error attempting to import matplotlib: {}".format(e))
+import matplotlib
+import matplotlib.style as mplstyle
+import matplotlib.pyplot as plt
+import matplotlib.ticker as _ticker
+import matplotlib.dates as _dates
+import matplotlib.figure as _figure
+import matplotlib.patches as _patches
 
 CSV_VARS = [
     ('TC Qty', 'tracks'),
@@ -112,10 +106,478 @@ Era = collections.namedtuple(
 )
 
 class ClimateEra(object):
+    """Used to house information from the <Hurdat2>.multi_season_info method."""
     def __init__(self, **kw):
         self.__dict__.update(**kw)
 
+# class Ellipsoid:    # Uncomment for lambda release
+class Ellipsoid(_patches.Ellipse):
+    """
+    An extended matplotlib.patches.Ellipse class.
+
+    This is used to form wind-extent ellipses in the <TropicalCyclone>.track_map
+    method.
+    """
+    @property
+    def slice_ne(self):
+        return list(self.get_verts()[
+            len(self.get_verts()) // 4: (len(self.get_verts()) // 4) * 2 + 1
+        ]) + [list(self.get_center())]
+        # return list(self.get_verts()[6:13]) + [list(self.get_center())]
+    @property
+    def slice_se(self):
+        return list(self.get_verts()[
+            0 : len(self.get_verts()) // 4 + 1
+        ]) + [list(self.get_center())]
+        # return list(self.get_verts()[:7]) + [list(self.get_center())]
+    @property
+    def slice_sw(self):
+        return list(self.get_verts()[
+            len(self.get_verts()) // 4 * 3 :
+        ]) + [list(self.get_center())]
+        # return list(self.get_verts()[-7:]) + [list(self.get_center())]
+    @property
+    def slice_nw(self):
+        return list(self.get_verts()[
+            len(self.get_verts()) // 4 * 2: (len(self.get_verts()) // 4) * 3 + 1
+        ]) + [list(self.get_center())]
+        # return list(self.get_verts()[12:19]) + [list(self.get_center())]
+
 class Hurdat2Reports:
+
+    def from_map(self, landfall_assist=True, digits=3, **kw):
+        """
+        Returns a list of clicked-coordinates from a mpl-interactive map where
+        the coordinates are tuples in (longitude, latitude) format. Initialized
+        map extents are relative to the atlantic or east/central pacific basins.
+
+        This method is designed to be a companion to the
+        <TropicalCyclone>.crosses method. If the list is passed to the
+        aforementioned method, it will be tested against a cyclone's track.
+        This can be useful to narrow down crossings over certain bearings and
+        landfalls across a coordinate polyline of interest.
+
+        Controls (also displayed on the interactive map):
+        -------------------------------------------------
+        Alt + LeftClick -> Add a point to the path
+        Alt + RightClick -> Remove previous point from the path
+        Alt + C -> Erase/Clear Path (start over)
+        Q (mpl-defined shortcut) -> close the screen but return the coordinates
+
+        N: toggle landfall_assist and any drawn arrows
+        <SHIFT> + arrows: Zoom
+        <CTRL> + arrows: Pan
+
+        Default Arguments:
+        ------------------
+            landfall_assist (True): This is an aid to assist you in drawing a
+                path in the proper direction if testing for landfall or
+                direction-dependent barrier crossing using the
+                <TropicalCyclone>.crosses method. If True, semi-transparent
+                arrows will be placed on the map to show from what direction
+                intersection would be tested for. A convenience kb shortcut
+                (L) has been included to toggle the display of the arrows
+            digits (3): The number of decimal places (precision) that the
+                returned coordinates will have.
+
+        Keyword Arguments
+        -----------------
+            backend (None): what mpl backend to request using
+        """
+        if kw.get("backend"):
+            matplotlib.use(kw.get("backend"))
+
+        plt.ion()
+
+        def add_point(x,y):
+            nonlocal clicked_coords
+            nonlocal point
+            nonlocal _arrows
+
+            try:
+                point.remove()
+            except Exception as e:
+                # print(e)
+                pass
+
+            clicked_coords.append(
+                (
+                    float(x),
+                    float(y)
+                )
+            )
+            point = plt.scatter(
+                x, y,
+                s = matplotlib.rcParams['lines.markersize'] ** 1.5,
+                facecolor = "black",
+            )
+            # draw arrow dependent upon landfall_assist
+            try:
+                segment = _gis.BoundingBox(
+                    _gis.Coordinate(*clicked_coords[-2]),
+                    _gis.Coordinate(*clicked_coords[-1]),
+                )
+                rotated = segment.rotate(-90)
+                
+                arrow_maxlen = 10
+                _dx = rotated.delta_x
+                _dy = rotated.delta_y
+                # modify if arrow is not user friendly
+                if rotated.length > arrow_maxlen:
+                    _dx = rotated.delta_hypot(arrow_maxlen).delta_x
+                    _dy = rotated.delta_hypot(arrow_maxlen).delta_y
+                _width = min(
+                    rotated.length * 0.2,
+                    1.5
+                )
+                _arrows.append(
+                    ax.arrow(
+                        rotated.p1.x,
+                        rotated.p1.y,
+                        _dx,
+                        _dy,
+                        width = _width,
+                        head_width = _width * 2.5,
+                        head_length = _width * 1.5,
+                        length_includes_head = True,
+                        # headwidth=segment.length * 0.9 * 19/8,
+                        facecolor=(1,0,0,0.3),
+                        edgecolor=(1,1,1,0),
+                        visible = landfall_assist
+                    )
+                )
+            except Exception as e:
+                pass
+
+        def remove_point():
+            nonlocal clicked_coords
+            nonlocal point
+            nonlocal _arrows
+
+            try:
+                point.remove()
+            except Exception as e:
+                # print(e)
+                pass
+
+            if len(clicked_coords) > 0:
+                del clicked_coords[-1]
+                try:
+                    point = plt.scatter(
+                        *clicked_coords[-1],
+                        s = matplotlib.rcParams['lines.markersize'] ** 1.5,
+                        facecolor = "black",
+                    )
+                    _arrows.pop().remove()
+                except Exception as e:
+                    pass
+
+        def onclick(event):
+            nonlocal point
+            nonlocal line
+            nonlocal _arrows
+            nonlocal clicked_coords
+
+            if str(event.key).lower() == "alt":
+                # Add a point/segment (alt + left click)
+                if event.button.value == 1:
+                    add_point(
+                        round(event.xdata, digits),
+                        round(event.ydata, digits)
+                    )
+                # remove point/segment (alt + right click)
+                if event.button.value == 3:
+                    remove_point()
+
+                # combine all clicked coordinates into one
+                if len(clicked_coords) >= 1:
+                    try:
+                        line[-1].remove()
+                    except:
+                        pass
+                    line = plt.plot(
+                        [x for x,y in clicked_coords],
+                        [y for x,y in clicked_coords],
+                        color = "red",
+                    )
+
+        def onpress(event):
+            nonlocal point
+            nonlocal line
+            nonlocal _arrows
+            nonlocal landfall_assist
+            nonlocal clicked_coords
+            # print(event.__dict__)
+
+            try:
+                # add home view if not already appended
+                if len(fig.canvas.toolbar._nav_stack) == 0:
+                    fig.canvas.toolbar.push_current()
+            except:
+                pass
+
+            if str(event.key).lower() == "alt+c":
+                try:
+                    line[-1].remove()
+                    point.remove()
+                    clicked_coords = []
+                    for arw in _arrows:
+                        arw.remove()
+                    _arrows = []
+                except:
+                    pass
+
+            # ylim (south, north)
+            # xlim (west, east)
+
+            # aspect ratio >= 1 -> x <= y
+            # aspect ratio < 1 -> x > y
+            ar = abs(operator.sub(*ax.get_ylim()) / operator.sub(*ax.get_xlim()))
+
+            # toggle landfall assist
+            if event.key.lower() == "n":
+                landfall_assist = not landfall_assist
+                lfall_text.set_text(
+                    "Landfall Assist (key: N): {}".format(
+                        "ON" if landfall_assist else
+                        "OFF"
+                    )
+                )
+                # toggle visibility of the arrows
+                for arrow in _arrows:
+                    arrow.set_visible(landfall_assist)
+
+            # Zoom in (shift + up or right)
+            if event.key.lower() in [
+                "shift+" + arrow for arrow in ("up","right")
+            ]:
+                min_span = 4
+                # ensure valid zoom in to avoid folding
+                new_xlim = (
+                    ax.get_xlim()[0] + 3 * (ar if ar >= 1 else 1),
+                    ax.get_xlim()[1] - 3 * (ar if ar >= 1 else 1)
+                )
+                new_ylim = (
+                    ax.get_ylim()[0] + 3 * (ar if ar < 1 else 1),
+                    ax.get_ylim()[1] - 3 * (ar if ar < 1 else 1)
+                )
+                # only zoom in if no folding will occur (west extent > east extent)
+                # and if the zoom-in won't be too much
+                if operator.le(*new_xlim) and operator.le(*new_ylim) \
+                and abs(operator.sub(*new_xlim)) > min_span \
+                and abs(operator.sub(*new_ylim)) > min_span:
+                    ax.set_xlim(
+                        ax.get_xlim()[0] + 3 * (ar if ar >= 1 else 1),
+                        ax.get_xlim()[1] - 3 * (ar if ar >= 1 else 1),
+                    )
+                    ax.set_ylim(
+                        ax.get_ylim()[0] + 3 * (ar if ar < 1 else 1),
+                        ax.get_ylim()[1] - 3 * (ar if ar < 1 else 1),
+                    )
+                    # Record the new view in the navigation stack (so home/back/forward will work)
+                    try:
+                        fig.canvas.toolbar.push_current()
+                    except:
+                        pass
+                # if it would zoom in too much, but the extents wouldn't fold,
+                #   zoom in, but do so at a minimum
+                elif operator.le(*new_xlim) and operator.le(*new_ylim):
+                    ax.set_xlim(
+                        statistics.mean(new_xlim) - 2,
+                        statistics.mean(new_xlim) + 2,
+                    )
+                    ax.set_ylim(
+                        statistics.mean(new_ylim) - 2,
+                        statistics.mean(new_ylim) + 2,
+                    )
+                    # Record the new view in the navigation stack (so home/back/forward will work)
+                    try:
+                        fig.canvas.toolbar.push_current()
+                    except:
+                        pass
+            # Zoom out (shift + up or right)
+            if event.key.lower() in [
+                "shift+" + arrow for arrow in ("down","left")
+            ]:
+                ax.set_xlim(
+                    ax.get_xlim()[0] - 3 * (ar if ar >= 1 else 1),
+                    ax.get_xlim()[1] + 3 * (ar if ar >= 1 else 1),
+                )
+                # Record the new view in the navigation stack (so home/back/forward will work)
+                try:
+                    fig.canvas.toolbar.push_current()
+                except:
+                    pass
+
+            # pan (ctrl+arrows)
+            if event.key.lower() in [
+                "ctrl+" + arrow for arrow in ("up","down","left","right")
+            ]:
+                everybody_move = min(
+                    abs(operator.sub(*ax.get_ylim())) / 5,
+                    abs(operator.sub(*ax.get_xlim())) / 5,
+                )
+                ax.set_xlim(
+                    ax.get_xlim()[0] + (
+                        everybody_move if "right" in event.key else
+                        everybody_move * -1 if "left" in event.key else
+                        0
+                    ),
+                    ax.get_xlim()[1] + (
+                        everybody_move if "right" in event.key else
+                        everybody_move * -1 if "left" in event.key else
+                        0
+                    ),
+                )
+                ax.set_ylim(
+                    ax.get_ylim()[0] + (
+                        everybody_move if "up" in event.key else
+                        everybody_move * -1 if "down" in event.key else
+                        0
+                    ),
+                    ax.get_ylim()[1] + (
+                        everybody_move if "up" in event.key else
+                        everybody_move * -1 if "down" in event.key else
+                        0
+                    ),
+                )
+                # Record the new view in the navigation stack (so home/back/forward will work)
+                try:
+                    fig.canvas.toolbar.push_current()
+                except Exception as e:
+                    pass
+
+        point = None
+        line = None
+        _arrows = []
+        clicked_coords = []
+        # matplotlib.use("TkAgg")
+        matplotlib.rcParams['path.simplify_threshold'] = 1
+
+        fig = plt.figure(
+            num = "Path Selector",
+            figsize = (
+                matplotlib.rcParams["figure.figsize"][0],
+                matplotlib.rcParams["figure.figsize"][0]
+            ),
+            layout = "constrained",
+        )
+        cid = fig.canvas.mpl_connect("button_press_event", onclick)
+        fig.canvas.mpl_connect("key_press_event", onpress)
+        plt.ion()
+        figman = plt.get_current_fig_manager()
+        figman.set_window_title(fig._label)
+
+        figtitle = fig.suptitle(
+            "\n".join([
+                "Path Selector",
+                "Alt+<LeftClick>: Add point to the path",
+                "Alt+<RightClick>: Remove previous point from the path",
+                "Alt+C: Erase/Clear Path",
+                "Q: Finish / Return path",
+            ]),
+            fontsize = "small",
+            linespacing = 0.8,
+        )
+
+        ax = plt.axes(
+            facecolor = "lightblue",
+            aspect="equal",
+            adjustable="datalim",   # aspect: equal and adj: datalim allows 1:1 in data-coordinates!
+        )
+
+        # Set the axis labels
+        ax.set_ylabel("Latitude")
+        ax.set_xlabel("Longitude")
+        ax.yaxis.set_major_locator(_ticker.MultipleLocator(5))
+        ax.yaxis.set_minor_locator(_ticker.MultipleLocator(1))
+        ax.xaxis.set_major_locator(_ticker.MultipleLocator(5))
+        ax.xaxis.set_minor_locator(_ticker.MultipleLocator(1))
+        ax.grid(True, color=(0.3, 0.3, 0.3))
+        ax.grid(True, which="minor", color=(0.6, 0.6, 0.6), linestyle=":")
+
+        # Draw Map
+
+        for postal, geo in _maps._polygons:
+            for polygon in geo:
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = "lightseagreen",
+                    edgecolor = "black",
+                    linewidth = 0.5,
+                )
+        for lake, geo in _maps._lakes:
+            for polygon in geo:
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = "lightblue",
+                    edgecolor = "black",
+                    linewidth = 0.3,
+                )
+
+        # Equator
+        # ax.plot([-180,180], [0,0], color="red")
+
+        # pacific basins
+        if "EP" in self.basin_abbr() or "CP" in self.basin_abbr():
+            ax.set_xlim(-160, -80)
+        # atlantic
+        else:
+            ax.set_xlim(-100, -40)
+        ax.set_ylim(0, 60)
+        # ax.set_box_aspect(1)
+        # ax.set_ylim(
+            # 42.5 - 85 * 3/4 / 2,
+            # 42.5 + 85 * 3/4 / 2,
+        # )
+        mplstyle.use("fast")
+
+        # KB Shortcuts
+        plt.figtext(
+            0.995,
+            0.01,
+            "\n".join([
+                "<SHIFT> + arrows: Zoom-in",
+                "<CTRL> + arrows: Pan",
+            ]),
+            color = (0,0,0,0.6),
+            ha = "right",
+            fontsize = "x-small",
+        )
+
+        # landfall assist toggle
+        lfall_text = plt.figtext(
+            0.005,
+            0.01,
+            "Landfall Assist (N): {}".format(
+                "ON" if landfall_assist else
+                "OFF"
+            ),
+            color = (0,0,0,0.6),
+            fontsize = "small",
+        )
+
+        # Map credits
+        plt.text(
+            0.995,
+            0.01,
+            "Map Data: Made with Natural Earth",
+            ha = "right",
+            fontsize = "x-small",
+            bbox = dict(
+                boxstyle = "Square, pad=0.1",
+                # edgecolor = (1,1,1,0),
+                facecolor = (1,1,1,0.6),
+                linewidth = 0,
+            ),
+            transform = ax.transAxes,
+        )
+
+        plt.show(block=True)
+
+        return clicked_coords
 
     def multi_season_info(self, year1=None, year2=None):
         """Grab a chunk of multi-season data and report on that climate era.
@@ -330,7 +792,7 @@ class Hurdat2Reports:
         _w, _h = _figure.figaspect(kw.get("aspect_ratio", 3/5))
         fig = plt.figure(
             figsize = (_w, _h),
-            tight_layout = True,
+            layout = "tight",
         )
         plt.get_current_fig_manager().set_window_title(
             "{} {} Climatological Tendency, {}".format(
@@ -645,69 +1107,248 @@ class TropicalCycloneReports:
             w.write(geojson.dumps(gjs, indent=INDENT))
 
     def track_map(self, **kw):
-        """EXPERIMENTAL! Return a map of the tropical-cyclone's track (via 
-        matplotlib). Each track will be color-coded based on associated wind-
-        speed and storm-status. Colors are controlled by saffir-simpson scale 
-        equivalent winds. When a storm in not objectively designated as a 
-        tropical-cyclone, its track will be represented as a dotted (rather
-        than solid) line.
+        """Return a map of the tropical-cyclone's track via matplotlib
+        (referred further as "mpl"). Each track will be color-coded based on
+        associated wind-speed and storm-status. Colors are controlled by
+        saffir-simpson scale equivalent winds. When a system is not a
+        designated tropical cyclone, its track will be represented as a dotted
+        (rather than solid) line.
 
-        * Basins that traverse 180 Longitude have not been accounted for in
-        preparation of the maps.
+        Keyboard Shortcuts
+        ------------------
+            Zoom: <SHIFT> + arrows
+            Pan: <CTRL> + arrows
+            Toggle Legend: N
+
+        * Clicking on a track segment will reveal basic information about the
+        <TCRecordEntry> that sources the segment. Clicking on an empty part of
+        the map will remove the label
 
         * Map feature coordinate data from Natural Earth (naturalearthdata.com)
 
-        Keyword Arguments:
-            aspect_ratio (float): the desired aspect-ratio of the figure;
-                defaults to 0.75 (4:3, the matplotlib default).
-            ocean (matplotlib-compatible color): the requested color for the
+        Accepted Keyword Arguments:
+        -----------------------------------
+            block (True): bool that applies to the "block" kw of the mpl pyplot
+                show method. The default value of True reflects the same of mpl.
+                A value of False allows one to display multiple track-map
+                instances at a time.
+            width (None): the desired figure width in inches (will be further
+                altered if using non-default dpi)
+            height (None): the desired figure height in inches (will be further
+                altered if using non-default dpi)
+            dpi (None): affects the dpi of the figure. Generally speaking, a
+                smaller dpi -> smaller figure. larger dpi -> larger figure  If
+                <None>, the matplotlib default (100) is used.
+            ocean (mpl-compatible color): the requested color for the
                 ocean (the background); defaults to 'lightblue'.
-            land (matplotlib-compatible color): the requested color for land-
+            land (mpl-compatible color): the requested color for land-
                 masses; defaults to 'lightseagreen'.
+            padding (2): how much extra space (in degrees) to place on the
+                focused system track. The larger this value the more map
+                (zoomed out) the display will be. Negative values work too.
             labels (bool): toggle for temporal labels for entries; defaults to
                 True.
             linewidth (float): the line-width of the track; defaults to 1.5.
             markersize (float): the entry-marker size; defaults to 3.
             legend (bool): whether or not you want to display a legend (default
                 is True).
+            draggable (False): do you want the displayed legend to be
+                interactive?
+            extents (bool): if True, and the data is available for a cyclone,
+                tropical storm, 50kt, and hurricane-force wind-extents will be
+                plotted. This defaults to False.
+            saveonly (False): if True,  the method will silently save an image
+                without generating a visible plot
+            backend (None): what mpl backend to request using
         """
-        matplotlib.rcParams['path.simplify_threshold'] = 1
-        # _w, _h = _figure.figaspect(kw.get("aspect_ratio", 3/4))
+
+        # matplotlib.rcParams['path.simplify_threshold'] = 1
+
+        if kw.get("backend"):
+            matplotlib.use(kw.get("backend"))
+
         fig = plt.figure(
-            # figsize = (_w, _h),
-            constrained_layout = True,
-        )
-        figman = plt.get_current_fig_manager()
-        figman.set_window_title(
-            "{} - {} Tracks".format(
+            num = "{} - {} Tracks".format(
                 self.atcfid,
                 self.name
-            )
+            ),
+            figsize = (
+                matplotlib.rcParams["figure.figsize"][0]
+                    if not kw.get("width") else kw.get("width"),
+                matplotlib.rcParams["figure.figsize"][1]
+                    if not kw.get("height") else kw.get("height"),
+            ),
+            
+            layout = "constrained",
+            dpi = kw.get("dpi", matplotlib.rcParams["figure.dpi"])
         )
+        plt.ion()
 
-        # This blocks out tkinter-specific code 
-        try:
-            MIN_SCREEN_DIM = "height" \
-                if figman.window.winfo_screenheight() < figman.window.winfo_screenwidth() \
-                else "width"
+        # declared outside of the inner function on purpose;
+        # will represent mpl Artist text that gives info on TCRecordEntry
+        entryinfo = None
+        def canvas_click(event):
+            # The purpose of this is to capture and process pick events when
+            #     in zoom or pan mode otherwise, I wouldn't need it.
+            nonlocal entryinfo
 
-            # set figure dimensions with a 4:3 aspect ratio
-            if MIN_SCREEN_DIM == "height":
-                fig.set_figheight(
-                    figman.window.winfo_screenmmheight() / 25.4 - 2
+            if event.inaxes:
+                try:
+                    entryinfo.remove()
+                except Exception as e:
+                    pass
+                # left click
+                if event.button.value == 1:
+                    ax.pick(event)
+
+        def show_entry_info(event):
+            nonlocal entryinfo
+            if hasattr(event, "artist") and hasattr(event.artist, "tcentry"):
+                try:
+                    entryinfo.remove()
+                except Exception as e:
+                    pass
+                entryinfo = plt.figtext(
+                    0.005,
+                    0.01,
+                    "{:%Y-%m-%d %H:%MZ} - {}; {}kts; {}".format(
+                        event.artist.tcentry.entrytime,
+                        event.artist.tcentry.status,
+                        event.artist.tcentry.wind,
+                        "{}mb".format(event.artist.tcentry.mslp)
+                        if event.artist.tcentry.mslp is not None
+                        else "N/A",
+                    ),
+                    fontsize = "small",
+                    fontweight = "bold",
+                    color = "blue",
+                    ha="left",
                 )
-                fig.set_figwidth(
-                    fig.get_figheight() * 1 / kw.get("aspect_ratio", 3/4)
+
+        def kb_zoom_pan(event):
+            # kb shortcuts for panning and zooming
+
+            try:
+                # add home view if not already appended
+                if len(fig.canvas.toolbar._nav_stack) == 0:
+                    fig.canvas.toolbar.push_current()
+            except:
+                pass
+            
+            ar = abs(operator.sub(*ax.get_ylim()) / operator.sub(*ax.get_xlim()))
+
+            if event.key.lower() == "n":
+                legend.set_visible(
+                    not legend.get_visible()
                 )
-            else:
-                fig.set_figwidth(
-                    figman.window.winfo_screenmmwidth() / 25.4 - 2
+
+            # Zoom in (shift + up or right)
+            if event.key in [
+                "shift+" + arrow for arrow in ("up","right")
+            ]:
+                min_span = 4
+                # ensure valid zoom in to avoid folding
+                new_xlim = (
+                    ax.get_xlim()[0] + 3 * (ar if ar >= 1 else 1),
+                    ax.get_xlim()[1] - 3 * (ar if ar >= 1 else 1)
                 )
-                fig.set_figheight(
-                    fig.get_figwidth() * kw.get("aspect_ratio", 3/4)
+                new_ylim = (
+                    ax.get_ylim()[0] + 3 * (ar if ar < 1 else 1),
+                    ax.get_ylim()[1] - 3 * (ar if ar < 1 else 1)
                 )
-        except:
-            pass
+                # only zoom in if no folding will occur (west extent > east extent)
+                # and if the zoom-in won't be too much
+                if operator.le(*new_xlim) and operator.le(*new_ylim) \
+                and abs(operator.sub(*new_xlim)) > min_span \
+                and abs(operator.sub(*new_ylim)) > min_span:
+                    ax.set_xlim(
+                        ax.get_xlim()[0] + 3 * (ar if ar >= 1 else 1),
+                        ax.get_xlim()[1] - 3 * (ar if ar >= 1 else 1),
+                    )
+                    ax.set_ylim(
+                        ax.get_ylim()[0] + 3 * (ar if ar < 1 else 1),
+                        ax.get_ylim()[1] - 3 * (ar if ar < 1 else 1),
+                    )
+                    # Record the new view in the navigation stack (so home/back/forward will work)
+                    try:
+                        fig.canvas.toolbar.push_current()
+                    except:
+                        pass
+                # if it would zoom in too much, but the extents wouldn't fold,
+                #   zoom in, but do so at a minimum
+                elif operator.le(*new_xlim) and operator.le(*new_ylim):
+                    ax.set_xlim(
+                        statistics.mean(new_xlim) - 2,
+                        statistics.mean(new_xlim) + 2,
+                    )
+                    ax.set_ylim(
+                        statistics.mean(new_ylim) - 2,
+                        statistics.mean(new_ylim) + 2,
+                    )
+                    # Record the new view in the navigation stack (so home/back/forward will work)
+                    try:
+                        fig.canvas.toolbar.push_current()
+                    except:
+                        pass
+            # Zoom out (shift + up or right)
+            if event.key in [
+                "shift+" + arrow for arrow in ("down","left")
+            ]:
+                ax.set_xlim(
+                    ax.get_xlim()[0] - 3 * (ar if ar >= 1 else 1),
+                    ax.get_xlim()[1] + 3 * (ar if ar >= 1 else 1),
+                )
+                # Record the new view in the navigation stack (so home/back/forward will work)
+                try:
+                    fig.canvas.toolbar.push_current()
+                except:
+                    pass
+
+            # pan (ctrl+arrows)
+            if event.key in [
+                "ctrl+" + arrow for arrow in ("up","down","left","right")
+            ]:
+                everybody_move = min(
+                    abs(operator.sub(*ax.get_ylim())) / 5,
+                    abs(operator.sub(*ax.get_xlim())) / 5,
+                )
+                ax.set_xlim(
+                    ax.get_xlim()[0] + (
+                        everybody_move if "right" in event.key else
+                        everybody_move * -1 if "left" in event.key else
+                        0
+                    ),
+                    ax.get_xlim()[1] + (
+                        everybody_move if "right" in event.key else
+                        everybody_move * -1 if "left" in event.key else
+                        0
+                    ),
+                )
+                ax.set_ylim(
+                    ax.get_ylim()[0] + (
+                        everybody_move if "up" in event.key else
+                        everybody_move * -1 if "down" in event.key else
+                        0
+                    ),
+                    ax.get_ylim()[1] + (
+                        everybody_move if "up" in event.key else
+                        everybody_move * -1 if "down" in event.key else
+                        0
+                    ),
+                )
+                # Record the new view in the navigation stack (so home/back/forward will work)
+                try:
+                    fig.canvas.toolbar.push_current()
+                except Exception as e:
+                    pass
+            # plt.ioff()
+
+        fig.canvas.mpl_connect("button_release_event", canvas_click)
+        fig.canvas.mpl_connect("pick_event", show_entry_info)
+        fig.canvas.mpl_connect("key_release_event", kb_zoom_pan)
+
+        figman = plt.get_current_fig_manager()
+        figman.set_window_title(fig._label)
 
         fig.suptitle("Tracks for {} - {}".format(
             "{} {} ({})".format(
@@ -734,11 +1375,15 @@ class TropicalCycloneReports:
         ))
 
 
+        # this is used in code below
         rc = matplotlib.rcParams
+
         ax = plt.axes(
-            facecolor = kw.get("ocean", "lightblue")
+            facecolor = kw.get("ocean", "lightblue"),
+            aspect="equal",
+            adjustable="datalim",   # aspect: equal and adj: datalim allows 1:1 in data-coordinates!
         )
-        self._hd2.fig = fig
+        # self._hd2.fig = fig
 
         # Set the axis labels
         ax.set_ylabel("Latitude")
@@ -753,185 +1398,313 @@ class TropicalCycloneReports:
         legend_objects = []
 
         for indx, entry in enumerate(self.entry):
-            if entry != self.entry[-1]:
-                labelangle = math.degrees(
+            # for angle comparison and label angle determination
+            if entry.previous_entry is not None:
+                prev_entry_angle = math.degrees(
                     math.atan2(
-                        self.entry[indx+1].lat - entry.lat,
-                        self.entry[indx+1].lon - entry.lon
+                        entry.lat - entry.previous_entry.lat,
+                        entry.lon - entry.previous_entry.lon
                     )
                 )
-                # labelrot = 45 if 150 <= labelangle <= 180 else \
-                    # (-45 if -180 <= labelangle <= -150 else 0)
-                labelrot = 45 \
-                    if (135 <= labelangle <= 180 or labelangle <= -170) else \
-                       (-45 if -170 < labelangle <= -135 else labelangle - 90)
-                halign = "left" if 0 <= labelrot <= 90 else "right"
-                # print(entry.time, labelangle, labelrot, halign)
+                prev_entry_angle += 360 if prev_entry_angle < 0 else 0
+            else:
+                prev_entry_angle = None
+
+            # if entry != self.entry[-1]:
+            if entry.next_entry is not None:
+                # q1    0   th  90
+                # q2    90  th  180
+                # q3    -179.999 <= th <= -90
+                # q4   -90 th  0
+                entry_angle = math.degrees(
+                    math.atan2(
+                        entry.next_entry.lat - entry.lat,
+                        entry.next_entry.lon - entry.lon
+                    )
+                )
+                entry_angle += 360 if entry_angle < 0 else 0
+
+                if prev_entry_angle is not None:
+                    avg_entry_angle = statistics.mean([entry_angle, prev_entry_angle])
+                else:
+                    avg_entry_angle = None
+
+                # labelrot = 45 if 135 <= entry_angle <= 190 else \
+                          # -45 if 190 < entry_angle <= 270 else \
+                          # (entry_angle - 90 + (360 if entry_angle - 90 < 0 else 0))
+                # labelrot = 45 if 90 <= entry_angle < 135 else \
+                           # entry_angle - 80 if 135 <= entry_angle <= 190 else \
+                           # -45 if 190 < entry_angle <= 270 else \
+                           # (entry_angle - 90 + (360 if entry_angle - 90 < 0 else 0))
+                labelrot = avg_entry_angle - 90 + (
+                        360 if avg_entry_angle -90 < 0 else 0
+                    ) if avg_entry_angle is not None else \
+                    45 if 90 <= entry_angle < 135 else \
+                    entry_angle - 80 if 135 <= entry_angle <= 190 else \
+                    -45 if 190 < entry_angle <= 270 else \
+                    (entry_angle - 90 + (360 if entry_angle - 90 < 0 else 0))
+                    
+                halign = "left" if labelrot <= 270 else "right"
+                if halign == "left" and labelrot > 120:
+                    labelrot -= 180
+                # print(
+                    # "{:%Y-%m-%d %Hz}".format(entry.time),
+                    # round(prev_entry_angle,1) if prev_entry_angle is not None else None,
+                    # round(entry_angle,1),
+                    # round(avg_entry_angle,1) if avg_entry_angle is not None else None,
+                    # round(labelrot,1),
+                    # halign
+                # )
+                # offset ? =  - 180 + (360 if entry.lon - 180 < -180 else 0)
+                # offset ? =  360 if entry.lon < 0 else 0
                 line2dobj_list = ax.plot(
-                    [entry.lon, self.entry[indx + 1].lon],
-                    [entry.lat, self.entry[indx +1].lat],
-                    "-" if entry.is_TC else ":",
-                    color = "hotpink" if entry.saffir_simpson == 5 else \
-                         "purple" if entry.saffir_simpson == 4 else \
-                         "red" if entry.saffir_simpson == 3 else \
-                         "orange" if entry.saffir_simpson == 2 else \
-                         "yellow" if entry.saffir_simpson == 1 else \
-                         "green" if entry.saffir_simpson == 0 else \
+                    [
+                        entry.lon,
+                        entry.next_entry.lon
+                    ],
+                    [entry.lat, entry.next_entry.lat],
+                    color = "#FF38A5" if entry.saffir_simpson == 5 else
+                         "purple" if entry.saffir_simpson == 4 else
+                         "red" if entry.saffir_simpson == 3 else
+                         "orange" if entry.saffir_simpson == 2 else
+                         "yellow" if entry.saffir_simpson == 1 else
+                         "green" if entry.saffir_simpson == 0 else
                          "black",
                     marker = ".",
                     markersize = kw.get("markersize", 3),
                     markeredgecolor = "black",
                     markerfacecolor = "black",
-                    linewidth = kw.get("linewidth", rc["lines.linewidth"]),
-                    label = "Category {}".format(entry.saffir_simpson) \
-                        if entry.saffir_simpson > 0 and entry.status == "HU" else \
-                        "Tropical Storm" \
-                        if entry.saffir_simpson == 0 and entry.status in ["SS", "TS"] else \
-                        "Tropical Depression" \
-                        if entry.saffir_simpson < 0 and entry.status in ["SD", "TD"] else \
-                        "Non-Tropical Cyclone",
+                    linestyle = "-" if entry.status in ["HU", "TS", "TD"]
+                        else (0, (3,1,1,1)) if entry.status in ["SS", "SD"]
+                        else ":",
+                    linewidth = kw.get("linewidth", rc["lines.linewidth"])
+                        if kw.get("extents", False) else
+                        kw.get("linewidth", rc["lines.linewidth"]) + 1
+                        if entry.is_TC and entry.saffir_simpson >= 3 else
+                        kw.get("linewidth", rc["lines.linewidth"])
+                        if entry.is_TC and entry.saffir_simpson >= 0 else
+                        kw.get("linewidth", rc["lines.linewidth"]) - 0.25,
+                    label = "Category {}".format(entry.saffir_simpson)
+                        if entry.status == "HU"
+                        else entry._status_desc if entry.is_TC
+                        else "Post/Potential Tropical Cyclone"
                 )
+                # 'mouseover' stuff
+                point = line2dobj_list[0]
+                point.tcentry = entry
+                point.set_picker(True)
+                point.set_pickradius(5)
+                # line2dobj_list[0].mouseover = True
+                # line2dobj_list[0].format_cursor_data("TESTING");
+                # print(line2dobj_list[0].get_cursor_data(None))
+
                 # Add a label to the legend if one doesn't exist already
-                if any(line2dobj_list[0].get_label() == line2dobj.get_label() for line2dobj in legend_objects) is False:
-                    legend_objects.extend(line2dobj_list)
-            # from ._calculations import distance_from_coordinates
-            # TS Radius
-            # w = _patches.Wedge(
-                # entry.location_reversed,
-                
-            # )
-            # ax.fill(
-                # [
-                    # entry.longitude,
-                    # distance_from_coordinates(*entry.location, entry.tsNE, "N")[1],
-                    # distance_from_coordinates(*entry.location, entry.tsNE, "E")[1],
-                # ],
-                # [
-                    # entry.latitude,
-                    # distance_from_coordinates(*entry.location, entry.tsNE, "N")[0],
-                    # distance_from_coordinates(*entry.location, entry.tsNE, "E")[0],
-                # ],
-                # zorder=10
-            # )
+                if point.get_label() not in [
+                    pt.get_label() for pt in legend_objects
+                ]:
+                    point.order_value = entry.saffir_simpson \
+                        if point.tcentry.is_TC else -2
+                    
+                    legend_objects.append(point)
 
             if kw.get("labels", True):
                 if entry.record_identifier == "L":
                     ax.annotate(
-                        "L     ",
+                        "  L        ",
                         (entry.lon, entry.lat),
                         fontsize = 10,
                         fontweight = "bold",
                         rotation = labelrot,
-                        horizontalalignment = halign
+                        rotation_mode = "anchor",
+                        horizontalalignment = halign,
+                        verticalalignment = "center_baseline",
+                        clip_on = True,
                     )
+                # labels for each point will show if extents are not shown
+                # or if they are, 00Z entry-indication will be shown
+                # or if it is a landfall entry
+                if kw.get("extents", False) is False \
+                or entry.hour == 0 \
+                or entry.record_identifier == "L":
                     ax.annotate(
-                        "     {:{YMD}{HM}Z}".format(
+                        "  {}{:{YMD}{HM}Z}  ".format(
+                            "    " if entry.record_identifier == "L" else "",
                             entry.time,
-                            YMD = "%m-%d " \
-                                if (entry.hour, entry.minute) == (0,0) else "",
+                            YMD = "%m-%d "
+                                if (entry.hour, entry.minute) == (0,0)
+                                else "",
                             HM = "%H%M" if entry.minute != 0 else "%H"
                         ),
                         (entry.lon, entry.lat),
-                        fontsize = 6,
+                        fontsize = 7
+                            if (entry.hour, entry.minute) == (0,0)
+                            or entry.record_identifier == "L"
+                            else 6,
+                        color = "black"
+                            if (entry.hour, entry.minute) == (0,0)
+                            or entry.record_identifier == "L"
+                            else (0.3,0.3,0.3),
                         rotation = labelrot,
-                        horizontalalignment = halign
+                        rotation_mode = "anchor",
+                        horizontalalignment = halign,
+                        verticalalignment = "center_baseline",
+                        clip_on = True,
                     )
-                else:
-                    ax.annotate(
-                        " {:{YMD}%HZ}".format(
-                            entry.time,
-                            YMD = "%m-%d " \
-                                if (entry.hour, entry.minute) == (0,0) else ""
-                        ),
-                        (entry.lon, entry.lat),
-                        fontsize = 6,
-                        color = "black" if (entry.hour, entry.minute) == (0,0) \
-                            else (0.5,0.5,0.5),
-                        rotation = labelrot,
-                        horizontalalignment = halign
-                    )
+
+        # Reorder legend labels now as it currently is only categories
+        legend_objects = sorted(
+            legend_objects,
+            key=lambda l: l.order_value
+        )
+
         ax.grid(True, color=(0.3, 0.3, 0.3))
         ax.grid(True, which="minor", color=(0.6, 0.6, 0.6), linestyle=":")
 
         # set focus to the TC entries
+        # This setting is persistent
         ax.set_xlim([
-            min(en.lon for en in self.tc_entries) - 2,
-            max(en.lon for en in self.tc_entries) + 2,
+            min(en.lon for en in self.tc_entries) - kw.get("padding", 2),
+            max(en.lon for en in self.tc_entries) + kw.get("padding", 2),
         ])
         ax.set_ylim([
-            min(en.lat for en in self.tc_entries) - 2,
-            max(en.lat for en in self.tc_entries) + 2,
+            min(en.lat for en in self.tc_entries) - kw.get("padding", 2),
+            max(en.lat for en in self.tc_entries) + kw.get("padding", 2),
         ])
 
-        # Set view-limits to be equal.
-        # *** THIS NEEDS TO BE DONE before maps are added. Once maps are added,
-        #     it places new limits. So to focus the end-result on the track,
-        #     the points are needed to be determined before any map is placed
-        # maxaxis == xaxis if longitudinal span >= latitudinal span, else yaxis
-
-        maxaxis = ax.xaxis \
-            if abs(operator.sub(*ax.get_xlim())) >= \
-            abs(operator.sub(*ax.get_ylim())) else ax.yaxis
-        # multiply the span * the aspect-ratio
-        maxaxis_diff = abs(operator.sub(*maxaxis.get_view_interval())) * (
-            kw.get("aspect_ratio", 3/4) \
-            if ax.xaxis == maxaxis \
-            else (1 / kw.get("aspect_ratio", 3/4))
-        )
-        # the final maxaxis interval
-        maxaxis_interval = maxaxis.get_view_interval()
-
-        # minaxis == xaxis if longitudinal span < latitudinal span, else yaxis
-        minaxis = ax.xaxis \
-            if abs(operator.sub(*ax.get_xlim())) < \
-            abs(operator.sub(*ax.get_ylim())) else ax.yaxis
-        # minaxis_diff = abs(operator.sub(*minaxis.get_view_interval()))
-
-        # the final minaxis interval
-        # from the mid-point of the minaxis, add(subtract) half of the maxaxis_diff
-        # this will ensure "equidistant" nice layout of map
-        minaxis_interval = [
-            (statistics.mean(minaxis.get_view_interval()) + maxaxis_diff / 2),
-            (statistics.mean(minaxis.get_view_interval()) - maxaxis_diff / 2)
-        ]
-
         # Draw Map
+        for postal, geo in _maps._polygons:
+            for polygon in geo:
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = kw.get("land", "lightseagreen"),
+                    # edgecolor = "black",
+                    linewidth = 0.5,
+                    zorder = 1,
+                )
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = (0,0,0,0),
+                    edgecolor = "black",
+                    linewidth = 0.5,
+                    zorder = 1.1,
+                )
+        for lake, geo in _maps._lakes:
+            for polygon in geo:
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = kw.get("ocean", "lightblue"),
+                    edgecolor = "black",
+                    linewidth = 0.3,
+                )
 
-        for atlas in [
-            _maps.all_land,
-            _maps.usa,
-            _maps.centam,
-            _maps.islands,
-        ]:
-            for country in atlas:
-                for polygon in country[1:]:
-                    ax.fill(
-                        [lon for lon, lat in polygon],
-                        [lat for lon, lat in polygon],
-                        color = kw.get("land", "lightseagreen"),
+        # TESTING
+        if kw.get("extents", False):
+            for extent, extcolor, extlabel in [
+                ("ts", "green", "TS-Force"),
+                ("ts50", "limegreen", "50kt"),
+                ("hu", "gold", "Hurricane-Force")
+            ]:
+                # legend
+                if kw.get("legend", True):
+                    legend_color_block = _patches.Rectangle(
+                        (0,0),
+                        1,
+                        1,
+                        facecolor = extcolor,
                         edgecolor = "black",
-                        linewidth = 0.5,
+                        label = extlabel,
+                        alpha = 0.8 if extent != "ts" else 0.6,
                     )
+                    legend_objects.append(legend_color_block)
 
-        # Reset Intervals to the TC Track
-        maxaxis.set_view_interval(
-            min(maxaxis_interval),
-            max(maxaxis_interval),
-            ignore=True
-        )
-        minaxis.set_view_interval(
-            min(minaxis_interval),
-            max(minaxis_interval),
-            ignore=True
-        )
+                for en in self.entry:
+                    for quad in ["NE", "SE", "SW", "NW"]:
+                        if getattr(en, "{}{}".format(extent,quad)) not in [0, None]:
+                            h = _calculations.distance_from_coordinates(
+                                en.lat,
+                                en.lon,
+                                getattr(en, "{}{}".format(extent,quad)),
+                                quad[-1]
+                            )
+                            z = _calculations.distance_from_coordinates(
+                                en.lat,
+                                en.lon,
+                                getattr(en, "{}{}".format(extent,quad)),
+                                quad[0]
+                            )
+
+                            ell = Ellipsoid(
+                                (en.lon, en.lat),
+                                abs(h[1] - en.location[1]),
+                                abs(z[0] - en.location[0]),
+                            )
+
+                            ax.fill(
+                                [x for x,y in getattr(ell, "slice_{}".format(quad.lower()))],
+                                [y for x,y in getattr(ell, "slice_{}".format(quad.lower()))],
+                                color = extcolor,
+                                linewidth = 0.5,
+                                # edgecolor = "black" if extcolor != "green" else None,
+                                edgecolor = None,
+                                picker = False,
+                                alpha = 0.8 if extent != "ts" else 0.6,
+                            )
 
         # Legend
-        if kw.get("legend", True):
-            legend = plt.legend(
-                legend_objects,
-                [line2dobj.get_label() for line2dobj in legend_objects],
-                loc = "upper right",
-            )
-            legend.set_draggable(True)
+        legend = plt.legend(
+            legend_objects,
+            [line2dobj.get_label() for line2dobj in legend_objects],
+            loc = "upper right",
+        )
+        legend.set_visible(kw.get("legend", True))
+        legend.set_draggable(
+            bool(kw.get("draggable"))
+        )
+
+        # Map credits
+        plt.text(
+            0.995,
+            0.01,
+            "Map Data: Made with Natural Earth",
+            ha = "right",
+            fontsize = "x-small",
+            bbox = dict(
+                boxstyle = "Square, pad=0.1",
+                # edgecolor = (1,1,1,0),
+                facecolor = (1,1,1,0.6),
+                linewidth = 0,
+            ),
+            transform = ax.transAxes,
+        )
+
         mplstyle.use("fast")
-        plt.show(block=False)
+
+        # Save the figure only
+        if kw.get("saveonly", False):
+            # ax.set_adjustable("box")
+            plt.savefig(
+                "{}_{}_tracks".format(
+                    self.atcfid,
+                    self.name,
+                ),
+                dpi=kw.get("dpi", matplotlib.rcParams["figure.dpi"])
+            )
+            # This is necessary to "flush" to presence of figures as "savefig" does not
+            # Other wise, subsequent calls would bring up the figure that was saved (but
+            # not originally shown).
+            orig_backend = matplotlib.rcParams["backend"]
+            matplotlib.use("Agg")   # so the plt.show() command won't show anything
+            plt.show() # this will flush the figure
+            matplotlib.use(orig_backend) # change back to original backend
+        # See the figure (the default)
+        else:
+            plt.show(
+                block = kw.get("block", True)
+            )
+        # Turn back on xscale / yscale kb keys if not using jupyter notebook
+        # if kw.get("backend") != "nbAgg":
+            # matplotlib.rcParams['keymap.yscale'] = orig_keymap_yscale
+            # matplotlib.rcParams['keymap.xscale'] = orig_keymap_xscale

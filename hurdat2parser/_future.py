@@ -1,5 +1,5 @@
 """
-hurdat2parser 2.2.3.1, Copyright (c) 2023, Kyle S. Gentry
+hurdat2parser 2.3.0.1, Copyright (c) 2024, Kyle S. Gentry
 
 MIT License
 
@@ -25,30 +25,78 @@ SOFTWARE.
 import statistics
 import math
 import operator
+import secrets
 
 from . import _maps
 from . import _calculations
 
-try:
-    import matplotlib
-    import matplotlib.style as mplstyle
-    import matplotlib.pyplot as plt
-    import matplotlib.ticker as _ticker
-    import matplotlib.dates as _dates
-    import matplotlib.figure as _figure
-    import matplotlib.patches as _patches
-except Exception as e:
-    print("* Error attempting to import matplotlib: {}".format(e))
+import matplotlib
+import matplotlib.style as mplstyle
+import matplotlib.pyplot as plt
+import matplotlib.ticker as _ticker
+import matplotlib.dates as _dates
+import matplotlib.figure as _figure
+import matplotlib.patches as _patches
 
 class Hurdat2:
-    pass
+    def draw_ellipse_quadrants(self, xy, width, height, angle=0, **kwargs):
+        e = Ellipsoid(xy, width, height, angle, **kwargs)
+
+        a = plt.axes(aspect="equal", adjustable="datalim")
+        a.fill([x for x,y in e.slice_ne], [y for x,y in e.slice_ne], color="blue")
+        a.fill([x for x,y in e.slice_se], [y for x,y in e.slice_se], color="red")
+        a.fill([x for x,y in e.slice_sw], [y for x,y in e.slice_sw], color="green")
+        a.fill([x for x,y in e.slice_nw], [y for x,y in e.slice_nw], color="yellow")
+        a.autoscale()
+        plt.show(block=False)
+
+    def random(self, year1=None, year2=None, **kw):
+        """
+        *** ONLY positional keywords (year1 and year2) recognized right now ***
+
+        Returns a random <TropicalCyclone> object from the database, optionally
+        based upon various criteria.
+
+        Required Keyword Arguments
+        -------------------------
+            year1 (None): the start year; defaults to beginning year of the
+                database.
+            year2 (None): the end year; defaults to the end of the database.
+
+        Other criteria
+        --------------
+            * All other keyword arguments can be valid <TropicalCyclone>
+            properties/attributes. Their values can be tuples of a stringified
+            comparison operator and a value or just a value (the "==" operator
+            will be implied)
+
+            Examples:
+            =========
+                atl.random(saffir_simpson = 5) -> A TCyc where winds reached
+                    category 5 strength
+                atl.random(minmslp=("<=", 920), ace=(">=", 30)) -> minimum mslp
+                    was less-than-or-equal to 920mb and ACE >= 30*10^-4
+                atl.random(1967, duration_TC=(">=", 10)) -> a TCyc occurring no
+                    sooner than 1967 that persisted for an accumulated 10+ days
+                    as a designated tropical cyclone.
+        """
+
+        year1 = self.record_range[0] if year1 is None \
+            or year1 < self.record_range[0] else year1
+        year2 = self.record_range[1] if year2 is None \
+            or year2 > self.record_range[1] else year2
+
+        return secrets.choice([
+            tcyc for tcyc in self.tc.values()
+            if year1 <= tcyc.year <= year2
+        ])
 
 class Season:
 
     def track_map(self, **kw):
         fig = plt.figure(
             # figsize = (_w, _h),
-            constrained_layout = True,
+            layout = "constrained",
         )
         figman = plt.get_current_fig_manager()
         # figman.set_window_title(
@@ -74,22 +122,37 @@ class Season:
                          "green" if _calculations.saffir_simpson_scale(tc.maxwind) == 0 else \
                          "black",
             )
-        # Draw Map
-        for atlas in [
-            _maps.all_land,
-            _maps.usa,
-            _maps.centam,
-            _maps.islands,
-        ]:
-            for country in atlas:
-                for polygon in country[1:]:
-                    ax.fill(
-                        [lon for lon, lat in polygon],
-                        [lat for lon, lat in polygon],
-                        color = kw.get("land", "lightseagreen"),
-                        edgecolor = "black",
-                        linewidth = 0.5,
+            ax.text(
+                tc.entry[0].lon,
+                tc.entry[0].lat,
+                "{}{}".format(
+                    tc.name if tc.name != "UNNAMED" else "",
+                    "{}{}{}".format(
+                        " (" if tc.name != "UNNAMED" else "",
+                        tc.atcfid,
+                        ")" if tc.name != "UNNAMED" else "",
                     )
+                )
+            )
+        # Draw Map
+        for postal, geo in _maps._polygons:
+            for polygon in geo:
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = kw.get("land", "lightseagreen"),
+                    edgecolor = "black",
+                    linewidth = 0.5,
+                )
+        for lake, geo in _maps._lakes:
+            for polygon in geo:
+                ax.fill(
+                    [lon for lon, lat in polygon],
+                    [lat for lon, lat in polygon],
+                    color = kw.get("ocean", "lightblue"),
+                    edgecolor = "black",
+                    linewidth = 0.3,
+                )
 
         ax.set_xlim(
             int(min(entry.lon for tc in self.tc.values() for entry in tc.entry))-5,
@@ -178,7 +241,7 @@ class TropicalCyclone:
 
     def stats_graph(self):
         fig = plt.figure(
-            constrained_layout = True,
+            layout = "constrained",
         )
 
         ax = plt.axes(
@@ -362,7 +425,7 @@ class TropicalCyclone:
     def areal_extent_graph(self):
         fig = plt.figure(
             # figsize = (_w, _h),
-            constrained_layout = True,
+            layout = "constrained",
         )
         # tropical storm extent
         plt.fill_between(

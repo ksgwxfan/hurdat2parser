@@ -4,6 +4,7 @@
 
 ### Contents
 
+- [v2.3 and v2.3.0.1](#v23-and-v2301)
 - [v2.2.3.1](#v2231)
 - [v2.2.3](#v223)
 - [v2.2.2](#v222)
@@ -11,6 +12,63 @@
 - [v2.1.1](#v211)
 - [v2.1](#v21)
 - [v2.0.1](#v201)
+
+## v2.3 and v2.3.0.1
+- for `v2.3.0.1`
+  - in `from_map()`, I ordered returned data to be in python's `float` form rather than of type `numpy.float64` (probably from a newer version of mpl that I didn't have installed while developing).
+  - removed a `__main__.py` file that I use only for development/testing purposes.
+- `Hurdat2` tweaks
+  - online retrieval now attempts to download to a local file.
+    - IMPORTANT! Versions `< 2.3` are not guaranteed to see the newest hurdat2 releases due to url-name structure change and too-strict regex code (my fault).
+  - Call/Retrieval improvements
+    - Attribute-like access to individual cyclones
+	  - named cyclones (ex: `atl.hugo`, `atl.rita`, etc).
+	    - This will return the most recent cyclone assigned a particular name. This guarantees that most-notorious cyclones with retired names will be returned
+	  - Assigned ATCFID's (a basin prefix, cyclone number, and the season) ... (ex: `atl.al171995` or `atl.AL171995`)
+	- recognizance of interchangeable order of season and cyclone number (`atl[1995,17]` or `atl[17,1995]` return the same `TropicalCyclone`. In addition, ATCF-ids without the basin prefix are recognized (`atl[171995]` or `atl[199517]`)
+  - added `random()` method that returns a random `TropicalCyclone` object.
+  - uniform `rank_seasons()` that allows part-season ranking
+    - added `method` keyword that allows one to choose the desired ranking method. The options are `D` for dense rankings (default) (1,2,2,3) or `C` for competition-based ranking (1,2,2,4).
+	- deprecated `rank_seasons_thru()` method.
+  - uniform `_season_stats` handler/wrapper method that supports printing to console or as `str`.
+    - deprecated `_season_stats_str` method
+  - added `from_map` method that uses `matplotlib` to draw polylines, returning them as tupled coordinates.
+    - added coastline coordinate constants
+	  - Click [Here](#included-coastlines-with-this-module) for a list of included coastlines.
+    - the purpose for these are to be used with the `<TropicalCyclone>.crosses` method (also new this version).
+- `Season` tweaks
+  - updated `stats()` method to now report densely-based <u>and</u> competition-based rankings.
+- `TropicalCyclone` tweaks
+  - added vector info and saffir-simpson ratings to `.summary()`
+  - added `crosses` method that allows comparing a system's track to a coordinate list to see if it crossed the path. Click [Here](#how-to-use-crosses) for a guide on how to use.
+  - removed/changed verbiage where I erroneously had indicated 50kt winds as "gale force".
+  - `.info()` temporal data are now status-based
+  - `track_map()` tweaks and improvements
+    - legend is no longer draggable by default. See keyword below
+    - removed auto-resizing that inadvertently required `tkinter` in previous versions.
+    - tweaked placement of NaturalEarth accreditation
+    - added keyboard shortcuts for Zooming (`SHIFT` &plus; arrows) and Panning (`CTRL` &plus; arrows) and toggle of legend (`N`)
+	- temporal labels no longer inadvertently alter the size of the Axes when panning.
+	- added some interaction. Clicking on a segment will reveal some basic `TCRecordEntry` (segment) information in the lower left corner of the display (may be buggy. Try toggling the maximize screen option and see if it appears).
+    - default behavior more-so mimics the `matplotlib` (mpl) defaults
+	- small visual improvements including default map extent, sub-tropical cyclone discrimination on map and legend, and bolder tracks for major hurricanes, and Natural Earth map citation
+	- higher resolution maps
+	- new supported keywords
+	  - removed `aspect_ratio` kw
+	  - added `width`, `height`; these are used in the figsize keyword when creating the figure.
+	  - added `dpi`, and `block`. These mimic their `mpl` counterparts
+	  - added `draggable` kw that indicates if the displayed legend should be able to be interacted with.
+	  - added `extents` kw that can show generalized quadrant-based TS, 50kt, and Hurricane force wind extents. As of the most recent hurdat2 release, this is only available for cyclones `>=` 2004.
+	  - added `padding` kw to allow modification of the default focal scope on the track itself. The higher this number, the more "zoomed-out" it will appear.
+	  - added `saveonly` kw that saves an image locally instead of showing the plot on screen. This also respects the aforementioned `width`, `height`, and `dpi` kw's
+	  - added `backend` to allow the user to dictate which mpl backend to use
+- `TCRecordEntry` tweaks
+  - formalized `entrytime`s as UTC/Zulu timezone (won't change calculated stats any)
+  - added `category` property as an alias for `saffir_simpson`
+- made small tweaks to Saffir-simpson scale to reflect data from [](http://nhc.noaa.gov/aboutsshws.php). Some of the scale I had was off by one or two knots. As reported data is rounded to the nearest 20th (0, 5, 10, 15, 20, etc), the tweaks are inconsequential.
+- added `gis` keyword to `_calculations.haversine`. This allows the use of coordinates in (lon, lat) format (`True`; common in GIS programs) or (lat, lon) (`False`; default). In future releases, I may go to the (lon, lat) format as default and uniform throughout.
+- `hurdat2()` methods made uniform by returning a string. You can optionally use the original line from the database instead of the default of objectively-formed wind-extent data.
+- inclusion of `BoundingBox` and `Coordinate` classes in `_gis` module. These are what enable functionality to the `from_map` and `crosses` methods.
 
 ## v2.2.3.1
 - Hotfix for `<TropicalCyclone>.track_map()` that simply skips over `tkinter`-dependent lines upon error (will occur if user does not have `tkinter` installed).

@@ -1,5 +1,5 @@
 """
-hurdat2parser 2.2.3.1, Copyright (c) 2023, Kyle S. Gentry
+hurdat2parser 2.3.0.1, Copyright (c) 2024, Kyle S. Gentry
 
 MIT License
 
@@ -28,17 +28,18 @@ import textwrap
 import datetime
 import calendar
 import collections
+import secrets
+import operator
 
-blah = dict(
-    tracks = 0, landfalls=0, landfall_TC = 0, landfall_TD = 0,
-    landfall_TS = 0, landfall_HU = 0, landfall_MHU = 0,
-    TSreach = 0, HUreach = 0, MHUreach = 0, track_distance = 0,
-    track_distance_TC = 0, track_distance_TS = 0,
-    track_distance_HU = 0, track_distance_MHU = 0,
-    ACE = 0, HDP = 0, MHDP = 0, cat45reach = 0, cat5reach = 0
-)
+from . import _gis
 
 class Hurdat2Calculations:
+
+    def random(self):
+        """
+        Returns a random <TropicalCyclone> object from the database.
+        """
+        return secrets.choice(list(self.tc.values()))
 
     def rank_seasons(self, quantity, stattr, year1=None, year2=None, descending=True, **kw):
         """Rank and compare full tropical cyclone seasons to one another.
@@ -52,11 +53,7 @@ class Hurdat2Calculations:
                     "track_distance_TC", "ACE", "track_distance_TS", "HDP",
                     "track_distance_HU", "MHDP", "track_distance_MHU"
 
-                * Note: Though attributes "track_distance", "landfalls", 
-                    "landfall_TD", "landfall_TS", "landfall_HU",
-                    "landfall_MHU", "TDonly", "TSonly", "HUonly", "cat45reach",
-                    and "cat5reach" are valid storm attributes to rank by,
-                    their quantities will not be visible in the ranking output.
+                * Note: Other <<Season>> attributes are valid to rank by, but their quantities will not be visible in the ranking output.
 
         Default Arguments:
             year1 (None): begin year. If included, the indicated year will
@@ -70,6 +67,19 @@ class Hurdat2Calculations:
             descending (True): bool to indicate sorting seasons in descending
                 (higher-to-lower) or not. The default of True implies seasons
                 will be ranked from higher-to-lower.
+            method ("D"): what ranking method to use. "D" (the default) will
+                report dense (quantity-based) ranks, while "C" will report
+                competition-method ranks.
+
+                * (D)ense: rank-placement will be based on their quantities.
+                    For example, if a season has the 3rd highest quantity of a
+                    value, its rank will be 3, regardless of the number of
+                    seasons that rank higher.
+                * (C)ompetiton: rank-placement will be based on the season
+                    compared to other seasons. For example, though a season may
+                    have the 3rd highest value, its rank could be 28th because
+                    there could be 27 seasons that have a higher value. This is
+                    common in sports (golf as a prime example).
 
         Examples:
         ---------
@@ -88,178 +98,78 @@ class Hurdat2Calculations:
                 of the top-10 seasons with the most Hurricanes prior-to, and
                 including the year 2000.
         """
+        from .__init__ import Season, TropicalCyclone
 
-        # --------------------
-        year1 = abs(year1) \
-            if type(year1) == int \
-            and abs(year1) >= self.record_range[0] \
-            else self.record_range[0]
-        year2 = abs(year2) \
-            if type(year2) == int \
-            and abs(year2) <= self.record_range[1] \
-            else self.record_range[1]
-
-        year1, year2 = [
-            min([year1, year2]),
-            max([year1, year2])
-        ]
-
-        if len(range(year1, year2)) == 0:
-            raise ValueError("The years given must be different!")
-
-        # List seasons sorted by stattr
-        sorted_seasons = sorted(
-            [s for s in self.season.values() if year1 <= s.year <= year2],
-            key=lambda czen: getattr(czen, stattr),
-            reverse = descending
-        )
-        # Values sorted
-        ranks = sorted(
-            set([
-                getattr(s, stattr) for s in sorted_seasons \
-                    if descending is False \
-                    or (getattr(s, stattr) > 0 and kw.get("info") is None) \
-                    or kw.get("info") is not None
-            ]),
-            reverse = descending
-        )[:quantity]
-
-        # RETURN if _season_stats (via rank_seasons_thru) method called this method
-        if kw.get("info", None) is not None:
-            # insert years data if not included in original ranking
-            if (year1 <= kw["info"] <= year2) is False:
-                ranks = sorted(
-                    ranks + [getattr(self.season[kw["info"]], stattr)],
-                    reverse = descending
+        class DerivedTropicalCyclone(TropicalCyclone):
+            @property
+            def track_distance(self):
+                """Returns the distance (in nmi) traversed by the system, regardless of
+                status (whether or not the system is designated as a tropical cyclone).
+                """
+                return sum(
+                    haversine(en.location, en.next_entry.location)
+                    for en in self.entry
+                    if en.next_entry is not None
                 )
-            return {
-                "seasonvalu": getattr(self.season[kw["info"]], stattr),
-                "rank": ranks.index(getattr(self.season[kw["info"]], stattr)) + 1,
-                "tied": len(["tie" for season in sorted_seasons if getattr(season, stattr) == getattr(self.season[kw["info"]], stattr)]) - 1,
-                "outof": len(ranks)
-            }
-        # List that holds printed quantities
-        printedqty = []
-        
-        print("")
-        print("TOP {} SEASONS RANKED BY {}".format(
-            len(ranks),
-            stattr.upper()
-        ).center(79))
 
-        print("{}{}".format(
-            str(self.basin()),
-            ", {}-{}".format(year1, year2)
-        ).center(79))
-        print("-" * 79)
+            @property
+            def track_distance_TC(self):
+                """The distance (in nmi) trekked by the system when a designated
+                tropical cyclone (status as a tropical or sub-tropical depression, a
+                tropical or sub-tropical storm, or a hurricane).
+                """
+                return sum(
+                    haversine(en.location, en.next_entry.location)
+                    for en in self.entry
+                    if en.next_entry is not None
+                    and en.is_TC
+                )
 
-        print("{:4}  {:4}  {:^6}  {:^4}  {:^4}  {:^4} {:^3}  {:^7}  {:^25}".format(
-            "","","","LAND","QTY","","","TC DIST",
-            "STATUS-RELATED TRACK" if "track_distance" in stattr else "ENERGY INDICES"
-        ))
-        print("{:4}  {:4}  {:^6}  {:^4}  {:^4}  {:^4} {:^3}  {:^7}  {:^25}".format(
-            "","","NUM OF","FALL","TRPC","QTY","QTY","TRAVRSD",
-            "DISTANCES (in nmi)" if "track_distance" in stattr else "x10^4 kt^2"
-        ))
-        print("RANK  YEAR  {:^6}  {:^4}  {:^4}  {:^4} {:^3}  {:^7}  {:^7}  {:^7}  {:^7}".format(
-            "TRACKS","TCs","STRM","HURR","MAJ","(nmi)",
-            "TRPCSTM" if "track_distance" in stattr else "ACE",
-            "HURRICN" if "track_distance" in stattr else "HDP",
-            "MAJHURR" if "track_distance" in stattr else "MHDP"
-        ))
-        print("{:-^4}  {:-^4}  {:-^6}  {:-^4}  {:-^4}  {:-^4} {:-^3}  {:-^7}  {:-^7}  {:-^7}  {:-^7}".format(
-            "","","","","","","","","","",""
-        ))
-        for season in sorted_seasons:
-            try:
-                current_rank = ranks.index(getattr(season, stattr)) + 1 \
-                    if ranks.index(getattr(season, stattr)) + 1 \
-                    not in printedqty else None
-            except:
-                break
-            print("{:>3}{:1}  {:4}  {:^6}  {:^4}  {:^4}  {:^4} {:^3}  {:>7.1f}  {:>{ACELEN}f}  {:>{ACELEN}f}  {:>{ACELEN}f}".format(
-                current_rank if current_rank is not None else "", 
-                "." if current_rank is not None else "",
-                season.year,
-                season.tracks,
-                season.landfall_TC,
-                season.TSreach,
-                season.HUreach,
-                season.MHUreach,
-                season.track_distance_TC,
-                season.track_distance_TS if "track_distance" in stattr \
-                    else season.ACE * math.pow(10,-4),
-                season.track_distance_HU if "track_distance" in stattr \
-                    else season.HDP * math.pow(10,-4),
-                season.track_distance_MHU if "track_distance" in stattr \
-                    else season.MHDP * math.pow(10,-4),
-                ACELEN = 7.1 if "track_distance" in stattr else 7.3
-            ))
-            if current_rank is not None and current_rank not in printedqty:
-                printedqty.append(current_rank)
-        print("")
+            @property
+            def track_distance_TS(self):
+                """The distance (in nmi) trekked by the system while a tropical storm
+                or hurricane.
+                """
+                return sum(
+                    haversine(en.location, en.next_entry.location)
+                    for en in self.entry
+                    if en.next_entry is not None
+                    and en.status in ["SS", "TS", "HU"]
+                )
 
-    def rank_seasons_thru(self, quantity, stattr, year1=None, year2=None, descending=True, **kw):
-        """Rank and compare *partial* tropical cyclone seasons to one another.
+            @property
+            def track_distance_HU(self):
+                """The distance (in nmi) trekked by the system while a hurricane."""
+                return sum(
+                    haversine(en.location, en.next_entry.location)
+                    for en in self.entry
+                    if en.next_entry is not None
+                    and en.status == "HU"
+                )
 
-        * Of note, if neither `start` or `thru` keywords are included, this
-        function becomes a wrapper for <Hurdat2>.rank_seasons
-
-        Required Arguments:
-            quantity: how long of a list of ranks do you want; an integer.
-            stattr: the storm attribute that you'd like to rank seasons by.
-            
-                * Storm Attributes: 
-                    "tracks", "landfall_TC", "TSreach", "HUreach", "MHUreach",
-                    "track_distance_TC", "ACE", "track_distance_TS", "HDP",
-                    "track_distance_HU", "MHDP", "track_distance_MHU"
-
-                * Note: Though attributes "track_distance", "landfalls", 
-                    "landfall_TD", "landfall_TS", "landfall_HU",
-                    "landfall_MHU", "TDonly", "TSonly", "HUonly", "cat45reach",
-                    and "cat5reach" are valid storm attributes to rank by,
-                    their quantities will not be visible in the ranking output.
-
-        Default Arguments:
-            year1 = None: begin year. If included, the indicated year will
-                represent the low-end of years to assess. In the absence of
-                the end-year, all years from this begin year to the end of the
-                record-range will be used in ranking.
-            year2 = None: end year. If included, the indicated year will
-                represent the upper-end of years to assess. In the absence of
-                the begin-year, all years from the start of the record-range
-                to this indicated year will be used in ranking.
-            descending = True: parallel bool used to determine reverse kw of
-                sorted calls; whether results will be printed higher-to-lower
-                or not.
-
-        Keyword Arguments:
-            start = (1, 1): list/tuple given to indicate the starting month and
-                day wherein a season's calculations will be made.
-            thru = (12,31): list/tuple representing the month and day that you
-                want to assess the seasons through. If start != (1,1) but thru
-                == (12,31), the stats reported will be through the Season's
-                ending.
-
-        Examples:
-        ---------
-        <Hurdat2>.rank_seasons_thru(10, "ACE", thru=[8,31]): Retrieve a report
-            of tropical cyclone seasons sorted by the top-10 ACE values through
-            August 31.
-        <Hurdat2>.rank_seasons_thru(10, "TSreach", 1967, thru=[9,15]): Retrieve
-            a report of tropical cyclone seasons sorted by the top-10 totals of
-            tropical storms through September 15, since 1967 (the satellite
-            era).
-        <Hurdat2>.rank_seasons_thru(20, "track_distance_TC", start=[7,1], thru=(10,31)):
-            Retrieve a report of the top-20 seasons of total distance traversed
-            by storms while being designated as tropical cyclones, between July
-            1st and the end of October.
-        """
+            @property
+            def track_distance_MHU(self):
+                """The distance (in nmi) trekked by the system while a major
+                hurricane.
+                """
+                return sum(
+                    haversine(en.location, en.next_entry.location)
+                    for en in self.entry
+                    if en.next_entry is not None
+                    and en.wind >= 96
+                    and en.status == "HU"
+                )
 
         year1 = self.record_range[0] if year1 is None \
             or year1 < self.record_range[0] else year1
         year2 = self.record_range[1] if year2 is None \
             or year2 > self.record_range[1] else year2
+
+        rank_method = str(kw.get("method", "D"))
+        if len(rank_method) > 0 and rank_method[0] in ["C", "c"]:
+            rank_method = "C"
+        else:
+            rank_method = "D"
 
         # Partial-Season Bookened Month, Day Tuples
         start = kw.get("start", (1,1))
@@ -271,187 +181,142 @@ class Hurdat2Calculations:
         if type(start) not in [list,tuple]:
             return print("OOPS! Ensure start is a list or tuple of (month,day)")
 
-        # If the full year is being asked for, this is essentially just a
-        #   wrapper for the regular rank_seasons method
-        if start == (1,1) and thru == (12,31):
-            result = self.rank_seasons(
-                quantity,
-                stattr,
-                year1,
-                year2,
-                descending,
-                info=kw.get("info")
-            )
-            return result
+        start = tuple(start)
+        thru = tuple(thru)
+
+        partyear = False
 
         rseason = {}
-        for season in [s for s in self.season.values() \
+
+        infoseason = None
+        valid_seasons = [s for s in self.season.values() if year1 <= s.year <= year2]
+
+        # account for a non-existent season being requested by stats method
+        if all([
+            kw.get("info") is not None,
+            kw.get("info") not in self.season
+        ]):
+            infoseason = Season(kw.get("info"), self)
+            valid_seasons.append(infoseason)
+
+        # Full year being asked for
+        if start == (1,1) and thru == (12,31):
+            # List seasons sorted by stattr
+            sorted_seasons = sorted(
+                valid_seasons,
+                key=lambda czen: getattr(czen, stattr),
+                reverse = descending
+            )
+            # Values sorted
+            ranks = sorted(
+                [
+                    getattr(s, stattr)
+                    for s in sorted_seasons
+                    if descending is False
+                    or (
+                        getattr(s, stattr) > 0
+                        and kw.get("info") is None
+                    ) or kw.get("info") is not None
+                ],
+                reverse = descending
+            )
+        # partial year
+        else:
+            partyear = True
+            rseason = {}
+            for season in [
+                s for s in self.season.values() \
                 if year1 <= s.year <= year2 \
-                or (kw.get("info") is not None \
-                    and s.year == kw.get("info"))]:
-            yr = season.year
-            rseason[yr] = dict(
-                tracks = 0, landfalls=0, landfall_TC = 0, landfall_TD = 0,
-                landfall_TS = 0, landfall_HU = 0, landfall_MHU = 0,
-                TSreach = 0, HUreach = 0, MHUreach = 0, track_distance = 0,
-                track_distance_TC = 0, track_distance_TS = 0,
-                track_distance_HU = 0, track_distance_MHU = 0,
-                ACE = 0, HDP = 0, MHDP = 0, cat45reach = 0, cat5reach = 0
-            )
-            # account for a non-existant season being requested by stats method
-            if kw.get("info") is not None and kw.get("info") not in self.season:
-                rseason[kw.get("info")] = dict(
-                tracks = 0, landfalls=0, landfall_TC = 0, landfall_TD = 0,
-                landfall_TS = 0, landfall_HU = 0, landfall_MHU = 0,
-                TSreach = 0, HUreach = 0, MHUreach = 0, track_distance = 0,
-                track_distance_TC = 0, track_distance_TS = 0,
-                track_distance_HU = 0, track_distance_MHU = 0,
-                ACE = 0, HDP = 0, MHDP = 0, cat45reach = 0, cat5reach = 0
-            )
-            for tc in season.tc.values():
-                track_added = False
-                lndfls = False; lndfl_TC = False; lndfl_TD = False;
-                lndfl_TS = False; lndfl_HU = False; lndfl_MHU = False;
-                rTS = False; rHU = False; rMHU = False; r45 = False; r5 = False
-                entries = [
-                    trk for trk in tc.entry #\
-                    # if start <= trk.month_day_tuple <= thru
-                ]
-                for INDX, ENTRY in enumerate(tc.entry):
-                    # Handle Track Distance related vars;
-                    # only need to check validity of INDX-1
-                    # if INDX >= 1 and start <= tc.entry[INDX-1].month_day_tuple <= thru:
-                    if INDX >= 1 \
-                    and ((thru != (12,31) and start <= tc.entry[INDX-1].month_day_tuple <= thru) \
-                    or (thru == (12,31) and datetime.date(tc.year, *start) <= tc.entry[INDX-1].entrytime.date())):
-                        rseason[yr]["track_distance"] += haversine(
-                            tc.entry[INDX-1].location,
-                            tc.entry[INDX].location
-                        )
-                        rseason[yr]["track_distance_TC"] += haversine(
-                            tc.entry[INDX-1].location,
-                            tc.entry[INDX].location
-                        ) if tc.entry[INDX-1].status in ("SD","TD","SS","TS","HU") else 0
-                        rseason[yr]["track_distance_TS"] += haversine(
-                            tc.entry[INDX-1].location,
-                            tc.entry[INDX].location
-                        ) if tc.entry[INDX-1].status in ("SS","TS","HU") else 0
-                        rseason[yr]["track_distance_HU"] += haversine(
-                            tc.entry[INDX-1].location,
-                            tc.entry[INDX].location
-                        ) if tc.entry[INDX-1].status == "HU" else 0
-                        rseason[yr]["track_distance_MHU"] += haversine(
-                            tc.entry[INDX-1].location,
-                            tc.entry[INDX].location
-                        ) if tc.entry[INDX-1].status == "HU" \
-                          and tc.entry[INDX-1].wind >= 96 else 0
-                    # Handle everything else
-                    if (thru != (12,31) and start <= ENTRY.month_day_tuple <= thru) \
-                    or (thru == (12,31) and datetime.date(tc.year, *start) <= ENTRY.entrytime.date()):
-                    # if start <= ENTRY.month_day_tuple <= thru:
-                        rseason[yr]["ACE"] += math.pow(ENTRY.wind,2) \
-                            if ENTRY.wind >= 34 \
-                            and ENTRY.status in ("SS","TS","HU") \
-                            and ENTRY.is_synoptic \
-                            else 0
-                        rseason[yr]["HDP"] += math.pow(ENTRY.wind,2) \
-                            if ENTRY.wind >= 64 \
-                            and ENTRY.status == "HU" \
-                            and ENTRY.is_synoptic \
-                            else 0
-                        rseason[yr]["MHDP"] += math.pow(ENTRY.wind,2) \
-                            if ENTRY.wind >= 96 and ENTRY.status == "HU" \
-                            and ENTRY.is_synoptic \
-                            else 0
-                        if track_added is False:
-                            rseason[yr]["tracks"] += 1
-                            track_added = True
-                        if lndfls is False and ENTRY.record_identifier == "L":
-                            rseason[yr]["landfalls"] += 1
-                            lndfls = True
-                        if lndfl_TC is False and ENTRY.record_identifier == "L" \
-                                and ENTRY.is_TC:
-                            rseason[yr]["landfall_TC"] += 1
-                            lndfl_TC = True
-                        if lndfl_TD is False and ENTRY.record_identifier == "L" \
-                                and ENTRY.status in ["SD","TD"]:
-                            rseason[yr]["landfall_TD"] += 1
-                            lndfl_TD = True
-                        if lndfl_TS is False and ENTRY.record_identifier == "L" \
-                                and ENTRY.status in ["SS","TS","HU"]:
-                            rseason[yr]["landfall_TS"] += 1
-                            lndfl_TS = True
-                        if lndfl_HU is False and ENTRY.record_identifier == "L" \
-                                and ENTRY.status == "HU":
-                            rseason[yr]["landfall_HU"] += 1
-                            lndfl_HU = True
-                        if lndfl_MHU is False and ENTRY.record_identifier == "L" \
-                                and ENTRY.status == "HU" and ENTRY.wind >= 96:
-                            rseason[yr]["landfall_MHU"] += 1
-                            lndfl_MHU = True
-                        if rTS is False and ENTRY.status in ["SS","TS","HU"]:
-                            rseason[yr]["TSreach"] += 1
-                            rTS = True
-                        if rHU is False and ENTRY.status in ["HU"]:
-                            rseason[yr]["HUreach"] += 1
-                            rHU = True
-                        if rMHU is False and ENTRY.wind >= 96:
-                            rseason[yr]["MHUreach"] += 1
-                            rMHU = True
-                        if r45 is False and ENTRY.wind >= 114:
-                            rseason[yr]["cat45reach"] += 1
-                            r45 = True
-                        if r5 is False and ENTRY.wind >= 136:
-                            rseason[yr]["cat5reach"] += 1
-                            r5 = True
-
-        sorted_seasons = sorted(
-            [s for s in self.season.values() if year1 <= s.year <= year2],
-            key=lambda s: rseason[s.year][stattr],
-            reverse = descending
-        )
-        # Values sorted
-        ranks = sorted(
-            set([
-                rseason[s.year][stattr] for s in sorted_seasons \
-                    if descending is False \
-                    or (rseason[s.year][stattr] > 0 and kw.get("info") is None) \
-                    or kw.get("info") is not None
-            ]),
-            reverse = descending
-        )[:quantity]
-
-        # RETURN if info method called this method
-        if kw.get("info", None) is not None:
-            if (year1 <= kw["info"] <= year2) is False:
-                ranks = sorted(
-                    set(ranks + [rseason[kw["info"]][stattr]]),
-                    reverse = descending
+                or (
+                    kw.get("info") is not None \
+                    and s.year == kw.get("info")
                 )
-            return {
-                "seasonvalu": rseason[kw["info"]][stattr],
-                "rank": ranks.index(rseason[kw["info"]][stattr]) + 1,
-                "tied": len(["tie" for season in rseason.values() if season[stattr] == rseason[kw["info"]][stattr]]) - 1,
-                "outof": len(ranks)
-            }
+            ]:
+                if season.year not in rseason:
+                    rseason[season.year] = Season(season.year, self)
+                for tcyc in season.tc.values():
+                    for en in tcyc.entry:
+                        if start <= en.month_day_tuple <= thru:
+                            # ensure cyclone exists in rseason
+                            if tcyc.atcfid not in rseason[season.year].tc:
+                                rseason[season.year].tc[tcyc.atcfid] = DerivedTropicalCyclone(
+                                    tcyc.atcfid,
+                                    tcyc.name,
+                                    rseason[season.year],
+                                    self
+                                )
+                            # append the entry
+                            # BUT !!!! What about handling of Track Distance related vars?
+                            # if INDX >= 1 and start <= tc.entry[INDX-1].month_day_tuple <= thru ????
+                            rseason[season.year].tc[tcyc.atcfid]._entry.append(en)
+            # append missing (info) season to rseason so next command will work
+            if kw.get("info") and kw.get("info") not in rseason:
+                rseason[kw.get("info")] = Season(kw.get("info"), self)
+            sorted_seasons = sorted(
+                valid_seasons,
+                key=lambda s: getattr(rseason[s.year], stattr),
+                reverse = descending
+            )
+            # Values sorted
+            ranks = sorted(
+                [
+                    getattr(rseason[s.year], stattr)
+                    for s in sorted_seasons
+                    if descending is False
+                    or (
+                        getattr(rseason[s.year], stattr) > 0
+                        and kw.get("info") is None
+                    ) or kw.get("info") is not None
+                ],
+                reverse = descending
+            )
+            # return rseason
 
         # List that holds printed quantities
         printedqty = []
 
-        print("")
-        print("TOP {} SEASONS RANKED BY {}, {}".format(
-                len(ranks),
-                stattr.upper(),
-                "{}through {}".format(
-                    "from {} ".format(
-                        "{} {}".format(
-                            calendar.month_abbr[start[0]], start[1]
-                        )
-                    ) if "start" in kw else "",
-                    "{} {}".format(
-                        calendar.month_abbr[thru[0]], thru[1]
-                    ) if thru != (12,31) else "End of Season"
+        # RETURN if info method called this method
+        if kw.get("info", None) is not None:
+            stat_season_obj = infoseason if infoseason is not None \
+                else rseason[kw.get("info")] if partyear \
+                else self.season[kw.get("info")]
+            if (year1 <= kw["info"] <= year2) is False:
+                ranks = sorted(
+                    set(ranks + [getattr(stat_season_obj, stattr)]),
+                    reverse = descending
                 )
+
+            return {
+                "seasonvalu": getattr(stat_season_obj, stattr),
+                "rank": sorted(set(ranks), reverse=descending).index(getattr(stat_season_obj, stattr)) + 1,
+                "tied": len([
+                    "tie" for season in (
+                        rseason.values() if partyear else self.season.values()
+                    ) if getattr(season, stattr) == getattr(stat_season_obj, stattr)
+                ]) - 1,
+                "outof": len(sorted(set(ranks),reverse=descending)),
+                # the .index() method works because it finds the index of the first inst.
+                "golf_rank": ranks.index(getattr(stat_season_obj, stattr)) + 1,
+                "golf_outof": len(ranks) - len([valu for valu in ranks if valu == ranks[-1]]) + 1,
+            }
+
+        print("")
+        print("TOP {} SEASONS RANKED BY {}{}".format(
+                quantity,
+                stattr.upper(),
+                "" if partyear is False 
+                else ", {}{}".format(
+                    "from {} {}".format(
+                        calendar.month_abbr[start[0]], start[1]
+                    ) if start != (1,1) else "",
+                    "{}through {} {}".format(
+                        " " if start != (1,1) else "",
+                        calendar.month_abbr[thru[0]]
+                            if thru != (12,31) else "the End of",
+                        thru[1]
+                            if thru != (12,31) else "Season"
+                    )
+                ),
             ).center(79)
         )
 
@@ -459,6 +324,12 @@ class Hurdat2Calculations:
             str(self.basin()),
             ", {}-{}".format(year1, year2)
         ).center(79))
+
+        print(
+            "{} Rankings".format(
+                "Dense" if rank_method == "D" else "Competition"
+            ).center(79)
+        )
         print("-" * 79)
 
         print("{:4}  {:4}  {:^6}  {:^4}  {:^4} {:^4} {:^3}  {:^7}  {:^25}".format(
@@ -478,31 +349,44 @@ class Hurdat2Calculations:
         print("{:-^4}  {:-^4}  {:-^6}  {:-^4}  {:-^4} {:-^4} {:-^3}  {:-^7}  {:-^7}  {:-^7}  {:-^7}".format(
             "","","","","","","","","","",""
         ))
+
+        # set up ranks for default dense mode (1-2-3-4)
+        if rank_method == "D":
+            ranks = sorted(set(ranks), reverse=descending)
+
         for season in sorted_seasons:
-            try:
-                current_rank = ranks.index(rseason[season.year][stattr]) + 1 \
-                    if ranks.index(rseason[season.year][stattr]) + 1 \
+            # only print stats if ordering by least-to-greatest
+            #    or if greatest-to-least at stat != 0
+            if descending is False or (
+                partyear is False and getattr(season, stattr) != 0
+                or
+                partyear is True and getattr(rseason[season.year], stattr) != 0
+            ):
+                season_obj = rseason[season.year] if partyear else season
+
+                current_rank = ranks.index(getattr(season_obj, stattr)) + 1 \
+                    if ranks.index(getattr(season_obj, stattr)) + 1 \
                     not in printedqty else None
-            except:
-                # indicates bounds beyond quantity asked for exceeded
-                break
-            print("{:>3}{:1}  {:4}  {:^6}  {:^4}  {:^4}  {:^4} {:^3}  {:>7.1f}  {:>{ACELEN}f}  {:>{ACELEN}f}  {:>{ACELEN}f}".format(
-                current_rank if current_rank is not None else "", 
-                "." if current_rank is not None else "",
-                season.year,
-                rseason[season.year]["tracks"],
-                rseason[season.year]["landfall_TC"],
-                rseason[season.year]["TSreach"],
-                rseason[season.year]["HUreach"],
-                rseason[season.year]["MHUreach"],
-                rseason[season.year]["track_distance_TC"],
-                rseason[season.year]["track_distance_TS"] if "track_distance" in stattr else rseason[season.year]["ACE"] * math.pow(10,-4),
-                rseason[season.year]["track_distance_HU"] if "track_distance" in stattr else rseason[season.year]["HDP"] * math.pow(10,-4),
-                rseason[season.year]["track_distance_MHU"] if "track_distance" in stattr else rseason[season.year]["MHDP"] * math.pow(10,-4),
-                ACELEN = 7.1 if "track_distance" in stattr else 7.3
-            ))
-            if current_rank is not None and current_rank not in printedqty:
-                printedqty.append(current_rank)
+                if current_rank is not None and current_rank > quantity:
+                    break
+
+                print("{:>3}{:1}  {:4}  {:^6}  {:^4}  {:^4}  {:^4} {:^3}  {:>7.1f}  {:>{ACELEN}f}  {:>{ACELEN}f}  {:>{ACELEN}f}".format(
+                    current_rank if current_rank is not None else "",
+                    "." if current_rank is not None else "",
+                    season.year,
+                    season_obj.tracks,
+                    season_obj.landfall_TC,
+                    season_obj.TSreach,
+                    season_obj.HUreach,
+                    season_obj.MHUreach,
+                    season_obj.track_distance_TC,
+                    season_obj.track_distance_TS if "track_distance" in stattr else season_obj.ACE * math.pow(10,-4),
+                    season_obj.track_distance_HU if "track_distance" in stattr else season_obj.HDP * math.pow(10,-4),
+                    season_obj.track_distance_MHU if "track_distance" in stattr else season_obj.MHDP * math.pow(10,-4),
+                    ACELEN = 7.1 if "track_distance" in stattr else 7.3
+                ))
+                if current_rank is not None and current_rank not in printedqty:
+                    printedqty.append(current_rank)
         print("")
 
     def rank_storms(self, quantity, stattr, year1=None, year2=None, coordextent=None, contains_method="anywhere"):
@@ -838,8 +722,29 @@ class Hurdat2Calculations:
                 printedqty.append(current_rank)
         print("")
 
-    def _season_stats_str(self, seasonreq, year1, year2, rstart, rthru, width, **kw):
-        strlist = []
+    def _season_stats(self, seasonreq, year1, year2, rstart, rthru, width, **kw):
+        """
+        Handler for <Season>.stats calls.
+        """
+        class SuperList(list):
+            def __init__(self, *args):
+                self.printed = []
+                super().__init__(*args)
+
+            def continue_print(self):
+                print_queue = []
+                for indx, line in enumerate(self):
+                    if indx not in self.printed:
+                        print_queue.append(line)
+                        self.printed.append(indx)
+                print("\n".join(print_queue))
+
+            def reset_printed(self):
+                self.printed = []
+
+        instruction = kw.get("instruction", print)
+
+        strlist = SuperList()
         yr = seasonreq
         strlist.append("-" * width)
         strlist.append("Tropical Cyclone Stats for {}".format(yr).center(width))
@@ -894,120 +799,12 @@ class Hurdat2Calculations:
                 subsequent_indent=" " * 4
             ):
                 strlist.append(line.center(width))
-        strlist.append("-" * width)
-
-        for attr, label in [
-            ("tracks", "Tropical Cyclones"),
-            ("track_distance_TC", "TC Track Distance"),
-            ("track_distance_TS", "TS Distance"),
-            ("track_distance_HU", "HU Distance"),
-            ("track_distance_MHU", "MHU Distance"),
-            ("TSreach", "Tropical Storms"),
-            ("ACE", "ACE"),
-            ("HUreach", "Hurricanes"),
-            ("HDP", "HDP"),
-            ("MHUreach", "Major Hurricanes"),
-            ("MHDP", "MHDP"),
-            ("landfall_TC", "Total Landfalling TC's"),
-            ("landfall_TS", "TS Landfalls"),
-            ("landfall_HU", "HU Landfalls")
-        ]:
-            if "landfall" not in attr or ("landfall" in attr and all(1971 <= y <= 1990 for y in range(year1, year2)) is False):
-                rankinfo = self.rank_seasons_thru(
-                    1337,
-                    attr,
-                    year1,
-                    year2,
-                    start = rstart,
-                    thru = rthru,
-                    descending=kw.get("descending", True),
-                    info=yr
-                )
-                strlist.append('{:<35}Rank {}/{}{}'.format(
-                    "* {}: {}{}   ".format(
-                        label,
-                        "{:.1f}".format(rankinfo["seasonvalu"]) \
-                            if "distance" in attr \
-                            else ("{:.1f}".format(rankinfo["seasonvalu"] * 10 ** (-4)) \
-                                if attr in ["ACE", "HDP", "MHDP"] \
-                                else rankinfo["seasonvalu"]
-                            ),
-                        " nmi" if "track_distance" in attr \
-                            else (" * 10^4 kt^2" \
-                                if attr in ["ACE", "HDP", "MHDP"] else ""
-                            ),
-                    ),
-                    rankinfo["rank"],
-                    rankinfo["outof"],
-                    " (tied w/{} other season{})".format(
-                        rankinfo["tied"],
-                        "s" if rankinfo["tied"] >= 2 else ""
-                    ) if rankinfo["tied"] > 0 else ""
-                ))
-        strlist.append("\n")
-        return "\n".join(strlist)
-
-    def _season_stats(self, seasonreq, year1, year2, rstart, rthru, width, **kw):
-
-        yr = seasonreq
-
-        print("")
-        print("-" * width)
-        print("Tropical Cyclone Stats for {}".format(yr).center(width))
-        print("{}{}".format(
-                self.basin(),
-                ""
-            ).center(width)
+        strlist.append(
+            "* Reported ranks are Dense (value-based) "
+            "and Competition (if different)",
         )
-        print("")
-        for line in textwrap.wrap(
-                "Stats calculated for Seasons {}".format(
-                    "{}-{}".format(
-                        year1,
-                        year2
-                    ) if year2 != self.record_range[1] \
-                    else "since {} ({} total seasons)".format(
-                        year1,
-                        self.record_range[1] - year1 + 1
-                    )
-                ),
-                width,
-                initial_indent=" " * 4,
-                subsequent_indent=" " * 4):
-            print(line.center(width))
-        if rstart != (1,1) or rthru != (12,31):
-            print(
-                "from {} thru {}".format(
-                    "{} {}".format(
-                        calendar.month_name[rstart[0]],
-                        rstart[1],
-                    ),
-                    "{} {}".format(
-                        calendar.month_name[rthru[0]],
-                        rthru[1],
-                    )
-                ).center(width)
-            )
-        print("")
-        for line in textwrap.wrap(
-                "* TS-related Statistics include Hurricanes in their totals" \
-                " except for landfall data",
-                width,
-                initial_indent=" " * 4,
-                subsequent_indent=" " * 4):
-            print(line.center(width))
-
-        print("")
-        # Only print this disclaimer if years in this range overlap
-        if any(1971 <= y <= 1990 for y in range(year1, year2 + 1)):
-            for line in textwrap.wrap(
-                    "* Hurdat2 Landfall data incomplete for seasons 1971-1990",
-                    width,
-                    initial_indent=" " * 4,
-                    subsequent_indent=" " * 4):
-                print(line.center(width))
-        print("-" * width)
-
+        strlist.append("-" * width)
+        if instruction == print: strlist.continue_print()
         for attr, label in [
             ("tracks", "Tropical Cyclones"),
             ("track_distance_TC", "TC Track Distance"),
@@ -1024,8 +821,12 @@ class Hurdat2Calculations:
             ("landfall_TS", "TS Landfalls"),
             ("landfall_HU", "HU Landfalls")
         ]:
-            if "landfall" not in attr or ("landfall" in attr and all(1971 <= y <= 1990 for y in range(year1, year2)) is False):
-                rankinfo = self.rank_seasons_thru(
+            if "landfall" not in attr or (
+                "landfall" in attr and all(
+                    1971 <= y <= 1990 for y in range(year1, year2)
+                ) is False
+            ):
+                rankinfo = self.rank_seasons(
                     1337,
                     attr,
                     year1,
@@ -1035,35 +836,59 @@ class Hurdat2Calculations:
                     descending=kw.get("descending", True),
                     info=yr
                 )
-                print('{:<35}Rank {}/{}{}'.format(
+                strlist.append('{:<35}Ranks: {:>{LEN}}{}{}'.format(
                     "* {}: {}{}   ".format(
                         label,
-                        "{:.1f}".format(rankinfo["seasonvalu"]) \
-                            if "distance" in attr \
-                            else ("{:.1f}".format(rankinfo["seasonvalu"] * 10 ** (-4)) \
-                                if attr in ["ACE", "HDP", "MHDP"] \
-                                else rankinfo["seasonvalu"]
-                            ),
-                        " nmi" if "track_distance" in attr \
-                            else (" * 10^4 kt^2" \
-                                if attr in ["ACE", "HDP", "MHDP"] else ""
-                            ),
+                        "{:.1f}".format(rankinfo["seasonvalu"])
+                            if "distance" in attr
+                            else "{:.1f}".format(rankinfo["seasonvalu"] * pow(10,-4))
+                            if attr in ["ACE", "HDP", "MHDP"]
+                            else rankinfo["seasonvalu"],
+                        " nmi"
+                            if "track_distance" in attr
+                            else " * 10^4 kt^2"
+                            if attr in ["ACE", "HDP", "MHDP"]
+                            else "",
                     ),
-                    rankinfo["rank"],
-                    rankinfo["outof"],
-                    " (tied w/{} other season{})".format(
+                    "{}/{}".format(
+                        rankinfo["rank"],
+                        rankinfo["outof"],
+                    ),
+                    " :: {:>{LEN}}".format(
+                        "{}/{}".format(
+                            rankinfo["golf_rank"],
+                            rankinfo["golf_outof"],
+                        ),
+                        LEN = len(str(year2-year1+1)) * 2 + 1,
+                    ) if rankinfo["rank"] != rankinfo["golf_rank"]
+                      or rankinfo["outof"] != rankinfo["golf_outof"]
+                      else "",
+                    " (tied w/{} season{})".format(
                         rankinfo["tied"],
                         "s" if rankinfo["tied"] >= 2 else ""
-                    ) if rankinfo["tied"] > 0 else ""
+                    ) if rankinfo["tied"] > 0 else "",
+                    LEN = len(str(year2-year1+1)) * 2 + 1,
                 ))
-        print("")
+            if instruction == print: strlist.continue_print()
+        if instruction == print: strlist.continue_print()
+        if instruction != print:
+            return "\n".join(strlist)
+        # if instruction == print:
+            # print("\n".join(strlist))
+        # else:
+            # return "\n".join(strlist)
 
 class SeasonCalculations:
 
     @property
+    def start_date_entry(self):
+        """The <<TCRecordEntry>> of the start of the season."""
+        return self.tc_entries[0]
+
+    @property
     def start_date(self):
         """The <<datetime>> of the start of the season."""
-        return self.tc_entries[0].entrytime
+        return self.start_date_entry.entrytime
 
     @property
     def start_ordinal(self):
@@ -1089,7 +914,7 @@ class SeasonCalculations:
         the season extended into the following year.
         """
         end = self.end_date.replace(year=1).toordinal()
-        # protect against seasons that extend into the following year
+        # provide for seasons that extend into the following year
         if end <= self.start_ordinal:
             return self.end_date.replace(year=2).toordinal()
         else:
@@ -1166,9 +991,277 @@ class SeasonCalculations:
 class TropicalCycloneCalculations:
 
     @property
+    def bounding_box(self):
+        """The bounding box enclosing all of the cyclones <TCRecordEntry>s."""
+        return _gis.BoundingBox(
+            _gis.Coordinate(
+                min(en.lon for en in self.entry),
+                max(en.lat for en in self.entry)
+            ),
+            _gis.Coordinate(
+                max(en.lon for en in self.entry),
+                min(en.lat for en in self.entry)
+            )
+        )
+
+    @property
+    def bounding_box_TC(self):
+        """
+        The bounding box enclosing all <TCRecordEntry>s where the system was
+        designated as a tropical cyclone
+        """
+        return _gis.BoundingBox(
+            _gis.Coordinate(
+                min(en.lon for en in self.tc_entries),
+                max(en.lat for en in self.tc_entries)
+            ),
+            _gis.Coordinate(
+                max(en.lon for en in self.tc_entries),
+                min(en.lat for en in self.tc_entries)
+            )
+        )
+
+    @staticmethod
+    def test(point, point2):
+        # the segment to inspect if the track crosses
+        segbb = _gis.BoundingBox(
+            _gis.Coordinate(*point),
+            _gis.Coordinate(*point2)
+        )
+        # find the angle that is perpendicular to the segment
+        perpendicular = direction(
+            segbb.p1.lat,
+            segbb.p1.lon,
+            segbb.p2.lat,
+            segbb.p2.lon,
+            right_hand_rule=True
+        )
+        p2 = abs(segbb.theta-180)
+        return [tuple(point), (round(point2[0],5), round(point2[1],5)), segbb.theta, segbb.heading, perpendicular, p2]
+
+
+    def crosses(self, *reference, direction_range=None, landfall=False, category=None, is_TC=False):
+        """
+        Returns whether or not the track of this system intersects a referenced
+        list of tupled coordinates (longitude, latitude). Optional
+        discriminators are detailed below.
+
+        Arguments:
+            reference: the list of coordinates in (lon, lat) tuples. It is
+                recommended to use the <Hurdat2>.from_map() method to formulate
+                the coordinate list. For convenience, there are coastline
+                coordinate lists that are part of the <Hurdat2> object. See
+                README about those.
+
+        Default Keyword Arguments:
+            direction_range (None): an optional list/tuple of direction range
+                only matching if the storm crosses the coordinates while its
+                direction is within the given range.
+
+                Direction Reference:
+                    0 or 360: North
+                          90: East
+                         180: South
+                         270: West
+
+                Examples:
+                             Tuple       Scope
+                             -----       -----
+                    North: (316, 44)     Broad
+                           (346, 14)    Narrow
+                     East: (46, 134)     Broad
+                           (75, 105)    Narrow
+                    South: (136, 224)    Broad
+                           (165, 205)   Narrow
+                     West: (226, 314)    Broad
+                           (255, 285)   Narrow
+
+            landfall (False): if True, it assesses crossings from a particular
+                side of segments of the reference. Think of this as a "right
+                hand rule", being perpendicular to a reference segment. So the
+                referenced list must be prepared using this in mind. As you
+                sketch around the landmass, envision an arrow pointing to the
+                right of the segment, with respect to its forward direction.
+
+                Example: To find systems that made landfall along the Carolina
+                    coasts, the reference must be compiled starting from the
+                    northern-most tip of the Outer Banks of North Carolina,
+                    tracing generally southwestward thru South Carolina.
+            category (None): represents an optional saffir-simpson (ss)
+                equivalent integer that will further discriminate whether a
+                cyclone crossed while its ss scale value was >= the category
+                given. Of note, this does NOT discriminate via the cyclone's
+                status at the time of crossing. See the is_TC kw for more info.
+            is_TC (False): if True, this will test if the system was a tropical
+                cyclone at the time of crossing (status of SD, SS, TD, TS, or
+                HU). It is recommended to use this in conjunction with the
+                category kw, as the saffir-simpson rating is strictly wind-
+                based.
+        """
+
+        if len(reference) == 1: # if a list of tupled coords are passed (like from_map method)
+            reference = [(x, y) for x, y in reference[0]]
+        if len(reference) <= 1:
+            raise ValueError(
+                "the list `reference` must contain 2 or more coordinate pairs "
+                "for comparison"
+            )
+
+        # if category is given, there is no need to check if the storm
+        #   never reached the magnitude inquired
+        if category is not None and saffir_simpson_scale(self.maxwind) < category:
+            return False
+
+        # if bounding boxes never cross, no need to check
+        refbb = _gis.BoundingBox(
+            _gis.Coordinate(
+                min(lon for lon, lat in reference),
+                max(lat for lon, lat in reference)
+            ),
+            _gis.Coordinate(
+                max(lon for lon, lat in reference),
+                min(lat for lon, lat in reference)
+            )
+        )
+
+        # no need to check if no track points are in the reference bounding box
+        # if all([en.location_rev not in refbb for en in self.entry]):
+            # return False
+
+        # iterate over each point
+        for indx, point in enumerate(reference):
+            try:
+                point2 = reference[indx+1]
+            except:
+                # no more segments to test
+                return False
+            if point2 == point:
+                # skip if points are the same
+                continue
+
+            # the segment to inspect if the track crosses
+            segbb = _gis.BoundingBox(
+                _gis.Coordinate(*point),
+                _gis.Coordinate(*point2)
+            )
+
+            # No need to check (so skip) if the reference segment doesn't even
+            #   intersect the track bounding box
+            if not segbb.intersects(self.bounding_box):
+                continue
+
+            # find the angle that is perpendicular to the segment
+            perpendicular = direction(
+                segbb.p1.lat,
+                segbb.p1.lon,
+                segbb.p2.lat,
+                segbb.p2.lon,
+                right_hand_rule=True
+            )
+            # perpendicular = math.fabs(segbb.theta-180)
+
+            # iterate over segments made by the cyclone's entries
+            # for entry in self.entry[1:]:
+            for entry in [
+                EN for EN in self.entry[1:]
+                if (
+                    category is None
+                    or EN.previous_entry.saffir_simpson >= category
+                ) and (
+                    not is_TC
+                    or EN.previous_entry.is_TC
+                ) and (
+                        # EN.location_rev in refbb
+                        # or EN.previous_entry.location_rev in refbb
+                    # )
+                    EN.previous_entry.bounding_box.intersects(segbb)
+                )
+            ]:
+                # the track segment to compare/inspect
+                enbb = entry.previous_entry.bounding_box
+
+                # determine if the entry's direction lies within the requested
+                #  range of angles (used for landfall testing)
+                angle_is_valid = is_angle_bounded(
+                    entry.direction(),
+                    perpendicular
+                )
+
+                # parallel test - if slopes are the same they will never cross
+                # and conditionally tests if cyclone's direction is within a requested range
+                if segbb.slope != enbb.slope and (
+                    direction_range is None
+                    or direction_range[0] <= entry.direction() <= direction_range[1]
+                ):
+                    # ilon = longitude intersection (x intersection)
+                    #   put 2 equations equal to one another; solve for x
+                    #   x = (b2 - b1) / (m1 - m2)
+                    try:
+                        ilon = (enbb.b - segbb.b) / (segbb.slope - enbb.slope)
+                        # if the x-intercept is bounded by the e/w points of each segment,
+                        #   PRESENCE HERE MEANS CROSSING HAS OCCURRED
+                        if enbb.w <= ilon <= enbb.e and segbb.w <= ilon <= segbb.e:
+                            # if testing for "landfall" (entry crosses from a
+                            #    compatible direction (to negate crossing the
+                            #    reference when going from land to sea)
+                            if landfall is True:
+                                # tests the crossing angle if it falls within a
+                                #   180deg sweep of the perpendicular angle of
+                                #   the 'land' segment
+                                if angle_is_valid is True and (
+                                    category is None
+                                    or entry.previous_entry.saffir_simpson >= category
+                                ):
+                                    return True
+                            # No landfall but >= category is requested
+                            elif category is not None:
+                                if entry.previous_entry.saffir_simpson >= category:
+                                    return True
+                            # otherwise, the crossing has been guaranteed
+                            else:
+                                return True
+                    # This block will run if one of the segments fail the
+                    #   vertical line test (segment runs north/south)
+                    except Exception as e:
+                        # solve the line formula for segbb with the enbb x value
+                        #  and test if that value lies within the n/s scope of enbb
+                        #  and if the enbb x value is withing the e/w scope of segbb
+                        if enbb.isvertical and (
+                            enbb.s <= segbb.slope * enbb.p1.x + segbb.b <= enbb.n
+                            and segbb.w <= enbb.p1.x <= segbb.e
+                        # solve the line formula for enbb with the segbb lon. value
+                        #  and test if that value lies within the n/s scope of segbb
+                        #  and if the segbb lon value is withing the e/w scope of enbb
+                        ) or segbb.isvertical and (
+                            segbb.s <= enbb.slope * segbb.p1.x + enbb.b <= segbb.n
+                            and enbb.w <= segbb.p1.x <= enbb.e
+                        ):
+                            # PRESENCE HERE MEANS CROSSING GUARANTEED
+                            # landfall test
+                            if landfall is True:
+                                if angle_is_valid is True and (
+                                    category is None
+                                    or entry.previous_entry.saffir_simpson >= category
+                                ):
+                                    return True
+                            # No landfall but >= category is requested
+                            elif category is not None:
+                                if entry.previous_entry.saffir_simpson >= category:
+                                    return True
+                            # otherwise, the crossing has been guaranteed
+                            else:
+                                return True
+        return False
+
+    @property
+    def start_date_entry(self):
+        """The <TCRecordEntry> of the birth of the cyclone."""
+        return self.tc_entries[0] if len(self.tc_entries) > 0 else None
+
+    @property
     def start_date(self):
         """The <<datetime>> of the birth of the tropical cyclone."""
-        return self.tc_entries[0].entrytime \
+        return self.start_date_entry.entrytime \
             if len(self.tc_entries) > 0 else None
 
     @property
@@ -1623,10 +1716,24 @@ class TropicalCycloneCalculations:
         else:
             return None
 
-
 class TCEntryCalculations:
 
     __slots__ = []
+
+    @property
+    def bounding_box(self):
+        """
+        The bounding box (or really, segment) defined by the point of this
+        entry and the next entry (if applicable).
+        """
+
+        if self.next_entry is not None:
+            return _gis.BoundingBox(
+                _gis.Coordinate(self.lon, self.lat),
+                _gis.Coordinate(self.next_entry.lon, self.next_entry.lat),
+            )
+        else:
+            return None
 
     @property
     def track_distance(self):
@@ -1697,7 +1804,7 @@ class TCEntryCalculations:
             and en.previous_entry.wind >= 96
         )
 
-    def direction(self, cardinal=False):
+    def direction(self, cardinal=False, right_hand_rule=False):
         """Returns the heading (in degrees) of the tropical cyclone at the time
         of the <TCRecordEntry>.
 
@@ -1708,6 +1815,9 @@ class TCEntryCalculations:
             cardinal (False): if True, it will return an accurate cardinal
                 direction abbreviation (ex: 'NNW' == North-Northwest) instead
                 of degrees.
+            right_hand_rule (False): if True, it will return the direction
+                normal or perpendicular to the heading following the right-hand
+                rule.
 
         Of note, the first entry (index of 0) of any tropical cyclone will not
         have any associated direction because there is no previous entry to
@@ -1716,10 +1826,10 @@ class TCEntryCalculations:
         For reference:
               Degrees           Direction
             ----------      -------------------
-              0 //  45      North // North-east
-             90 // 135      East  // South-east
-            180 // 225      South // South-west
-            270 // 315      West  // North-west
+              0 //  45      North // Northeast
+             90 // 135      East  // Southeast
+            180 // 225      South // Southwest
+            270 // 315      West  // Northwest
         """
         if self._tc.entry.index(self) != 0:
             dlat = self.latitude - self.previous_entry.latitude
@@ -1731,6 +1841,15 @@ class TCEntryCalculations:
                     360 * (1 if self.longitude < 0 else -1)
                 ) - self.previous_entry.longitude
             deg_dir = math.degrees(math.atan2(dlon, dlat))
+
+            if right_hand_rule:
+                deg_dir += 90
+            if cardinal is True:
+                return cardinal_direction(
+                    deg_dir + (360 if deg_dir < 0 else 0)
+                )
+            else:
+                return deg_dir + (360 if deg_dir < 0 else 0) 
             if cardinal is True:
                 return cardinal_direction(
                     deg_dir + (360 if deg_dir < 0 else 0)
@@ -1762,6 +1881,15 @@ class TCEntryCalculations:
 
     @property
     def saffir_simpson(self):
+        """
+        Returns the saffir-simpson scale rating of the tropical cyclone. This
+        is solely based upon the maximum sustained wind value. If at-least
+        hurricane-strength, this will return a category between 1 and 5. For Non-
+        hurricane strength storms will return 0 if tropical storm strength or
+        -1 for depression strength or less. 0 or -1 does not appear on the
+        saffir-simpson scale but were included in this method for continuity
+        and distinguishing between those weaker systems.
+        """
         return saffir_simpson_scale(self.wind)
 
     @property
@@ -1785,13 +1913,13 @@ class TCEntryCalculations:
 
     @property
     def avg_wind_extent_TS50(self):
-        """Returns the average extent of at-least gale winds."""
+        """Returns the average extent of at-least 50kt winds."""
         return statistics.mean(self.extent_TS50)
 
     @property
     def areal_extent_TS50(self):
-        """Return the instantaneous maximum gale-strength wind (TS50; winds >=
-        50kts) areal expanse (in nmi^2) covered by the storm.
+        """Return the instantaneous maximum 50kt+ wind (TS50) areal expanse (in
+        nmi^2) covered by the storm.
         
         This is calculated by taking each TS50-wind quadrant value and summing
         their areal-extents (those extents being considered 1/4 of a circle). 
@@ -1823,27 +1951,29 @@ class TCEntryCalculations:
         )
 
 def saffir_simpson_scale(spd):
-    """Static method that returns the equivalent saffir-simpson scale rating,
-    based on wind-speed in knots.
+    """Returns the equivalent Saffir-Simpson scale rating, based on wind-speed
+    in knots.
 
-    This is the most-common index used to generalize tropical cyclone
-    intensity. Tropical storm speeds will return 0; Weaker storms will return
-    -1.
+    This is a very common scale used to generalize tropical cyclone intensity.
+    Though not officially part of the scale, cyclones that have Tropical Storm
+    speeds will return 0 while even-weaker storms will return -1.
 
     Example: saffir_simpson_scale(100) --> 3 (implying category 3).
     """
     if 34 <= spd < 64:     return 0
     elif 64 <= spd < 83:   return 1
     elif 83 <= spd < 96:   return 2
-    elif 96 <= spd < 114:  return 3
-    elif 114 <= spd < 136: return 4
-    elif spd >= 136:   return 5
+    elif 96 <= spd < 113:  return 3
+    elif 113 <= spd < 137: return 4
+    elif spd >= 137:   return 5
     else: return -1
 
 def distance_from_coordinates(lat, lon, distance, direction):
+    direction = direction.upper()
     latr = math.radians(lat)
     lonr = math.radians(lon)
-    if distance == None: distance = 0
+    if distance == None:
+        distance = 0
     r = 3440.065    # mean radius of earth in nmi
     
     if direction in ["N", "S"]:
@@ -1856,22 +1986,26 @@ def distance_from_coordinates(lat, lon, distance, direction):
         x = (2 if direction == "E" else -2) * math.asin(math.sqrt(math.pow(math.sin(distance / (2 * r)), 2) / math.pow(math.cos(latr), 2))) + lonr
         return (lat, math.degrees(x))
 
-def haversine(startpos, endpos):
+def haversine(startpos, endpos, gis=False):
     """Returns the distance (in nmi) between two tupled GPS coordinates.
 
     Args:
         startpos: the starting gps-coordinate point; in tuple form of 
-            (latitude, longitude). Both need to be an int or float.
+            (latitude, longitude) unless gis kw is True. Both need to be an int
+            or float.
         endpos: the ending gps-coordinate point; in tuple form of (latitude,
-            longitude). Both need to be an int or float.
+            longitude) unless gis kw is Ture. Both need to be an int or float.
+
+    Default Args:
+        gis (False): the function wants coordinates in (lat, lon) format. If this kw is True, then it expects (lon, lat) order.
 
     The formula used was found on Wikipedia
         (https://en.wikipedia.org/wiki/Haversine_formula).
     """
-    lat1 = math.radians(startpos[0])
-    lon1 = math.radians(startpos[1])
-    lat2 = math.radians(endpos[0])
-    lon2 = math.radians(endpos[1])
+    lat1 = math.radians(startpos[0 if gis is False else 1])
+    lon1 = math.radians(startpos[1 if gis is False else 0])
+    lat2 = math.radians(endpos[0 if gis is False else 1])
+    lon2 = math.radians(endpos[1 if gis is False else 0])
     r = 3440.065    # mean radius of earth in nmi
     d = 2 * r * math.asin(math.sqrt(math.pow(math.sin((lat2 - lat1)/2),2) + math.cos(lat1) * math.cos(lat2) * math.pow(math.sin((lon2-lon1)/2),2)))
     return d
@@ -1905,12 +2039,31 @@ def cardinal_direction(deg):
     elif deg <= 348.75: return "NNW"
     else: return "N"
 
-
-def direction(lat1, lon1, lat2, lon2, cardinal=False):
+def direction(lat1, lon1, lat2, lon2, cardinal=False, right_hand_rule=False):
     """
-    This is essentially a mirror function of the
-    <TCEntryCalculations>.direction method. Just included so I could test some
-    arbitrary coordinates and revisit later if I choose.
+    Return the navigational heading (0deg = North) between two points (going
+    from point 1 towards point 2.
+
+    Arguments
+    ---------
+        lat1 = latitude of point 1
+        lon1 = longitude of point 1
+        lat2 = latitude of point 2
+        lon2 = longitude of point 2
+
+    Default Arguments
+    -----------------
+        cardinal (False): if True, this will return a string representation of
+            the heading (its abbreviation actually).
+            Examples:
+                0 -> "N"
+                45 -> "NE"
+                225 -> "SW"
+        right_hand_rule (False): if True, the returned value will be rotated 90
+            degrees "to the right" of the heading.
+
+    This is essentially a mirror function of <TCEntryCalculations>.direction so
+    it could be accessible to other functions/methods in this file.
     """
     dlat = lat2 - lat1
     # account for longitudinal traversals of 180E/-180W
@@ -1921,13 +2074,54 @@ def direction(lat1, lon1, lat2, lon2, cardinal=False):
             360 * (1 if lon2 < 0 else -1)
         ) - lon1
     deg_dir = math.degrees(math.atan2(dlon, dlat))
+    if right_hand_rule:
+        deg_dir = deg_dir + 90
     if cardinal is True:
         return cardinal_direction(
             deg_dir + (360 if deg_dir < 0 else 0)
         )
     else:
-        return deg_dir + (360 if deg_dir < 0 else 0)
+        return deg_dir + (360 if deg_dir < 0 else 0) 
 
+def is_angle_bounded(deg, reference, scope=180):
+    """
+    Tests (and returns) whether or not an angle falls within a certain range
+    that is centered at a reference angle.
+
+    Args:
+        deg = the angle to be tested
+        reference = the angle that will be the center of the determined range
+
+    Default Keyword Arguments:
+        scope (180): the angle spectrum centered at the reference angle from
+            which the test will be made. For example:
+
+                 Deg   Reference Angle   Scope      Angle Range      Result
+                ----   ---------------   -----   ----------------    ------
+                  70        85            180       (>=355, <=175)    True
+                 200        175            40     (>=155, <=195)      False
+                 325        350            60      (>=320, <=20)      True
+    """
+    _min = reference - scope/2
+    _max = reference + scope/2
+
+    return _min < deg < _max \
+        if not deg < _min < _max \
+        and not _min < _max < deg \
+        else _min < deg + 360 < _max \
+        if not _min < _max < deg \
+        else _min < deg - 360 < _max
+
+def operator_map(logic):
+    opmap = {
+        "<"  : operator.lt,
+        "<=" : operator.le,
+        "==" : operator.eq,
+        "!=" : operator.ne,
+        ">=" : operator.ge,
+        ">"  : operator.gt,
+    }
+    return opmap[logic]
 
 
 

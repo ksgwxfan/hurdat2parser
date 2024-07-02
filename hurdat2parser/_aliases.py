@@ -1,5 +1,5 @@
 """
-hurdat2parser 2.2.3.1, Copyright (c) 2023, Kyle S. Gentry
+hurdat2parser 2.3.0.1, Copyright (c) 2024, Kyle S. Gentry
 
 MIT License
 
@@ -21,6 +21,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 """
+
 
 class Hurdat2Aliases:
 
@@ -55,6 +56,16 @@ class SeasonAliases:
     def mhdp(self):
         return self.MHDP
 
+    @property
+    def genesis_entry(self):
+        """The <TCRecordEntry> of the birth of the seasons."""
+        return self.start_date_entry
+
+    @property
+    def genesis(self):
+        """The moment (datetime) that the season began."""
+        return self.start_date
+
 class TropicalCycloneAliases:
 
     @property
@@ -81,6 +92,16 @@ class TropicalCycloneAliases:
     def entry(self):
         return self._entry
 
+    @property
+    def genesis_entry(self):
+        """The <TCRecordEntry> of the birth of the cyclone."""
+        return self.start_date_entry
+
+    @property
+    def genesis(self):
+        """The moment (datetime) of the birth of the cyclone."""
+        return self.start_date
+
     # Energy Indices lower-case shortcuts
     @property
     def ace(self):
@@ -93,6 +114,14 @@ class TropicalCycloneAliases:
     @property
     def mhdp(self):
         return self.MHDP
+
+    @property
+    def max_rmw(self):
+        """
+        Returns the maximum radius of maximum winds recorded during the life of
+        the storm.
+        """
+        return self.max_maxwind_radius
 
 class TCEntryAliases:
     __slots__ = []
@@ -137,6 +166,10 @@ class TCEntryAliases:
         return (self.date.month, self.date.day)
 
     # Stats
+    @property
+    def category(self):
+        """Alias for saffir simpson rating."""
+        return self.saffir_simpson
 
     @property
     def record_identifier(self):
@@ -214,6 +247,9 @@ class TCEntryAliases:
         """
         Returns the tropical storm-strength (>= 34kts) wind extent experienced
         in the cyclone's northeast quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._tsNE
 
@@ -222,6 +258,9 @@ class TCEntryAliases:
         """
         Returns the tropical storm-strength (>= 34kts) wind extent experienced
         in the cyclone's southeast quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._tsSE
 
@@ -230,6 +269,9 @@ class TCEntryAliases:
         """
         Returns the tropical storm-strength (>= 34kts) wind extent experienced
         in the cyclone's southwest quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._tsSW
 
@@ -238,6 +280,9 @@ class TCEntryAliases:
         """
         Returns the tropical storm-strength (>= 34kts) wind extent experienced
         in the cyclone's northwest quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._tsNW
 
@@ -245,32 +290,40 @@ class TCEntryAliases:
     @property
     def ts50NE(self):
         """
-        Returns the gale-force (>= 50kts) wind extent experienced in the
-        cyclone's northeast quadrant.
+        Returns the 50kt+ wind extent found in the cyclone's northeast quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._ts50NE
 
     @property
     def ts50SE(self):
         """
-        Returns the gale-force (>= 50kts) wind extent experienced in the
-        cyclone's southeast quadrant.
+        Returns the 50kt+ wind extent found in the cyclone's southeast quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._ts50SE
 
     @property
     def ts50SW(self):
         """
-        Returns the gale-force (>= 50kts) wind extent experienced in the
-        cyclone's southwest quadrant.
+        Returns the 50kt+ wind extent found  in the cyclone's southwest quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._ts50SW
 
     @property
     def ts50NW(self):
         """
-        Returns the gale-force (>= 50kts) wind extent experienced in the
-        cyclone's northwest quadrant.
+        Returns the 50kt+ wind extent found in the cyclone's northwest quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._ts50NW
 
@@ -280,6 +333,9 @@ class TCEntryAliases:
         """
         Returns the hurricane-force (>= 64kts) wind extent experienced in the
         cyclone's northeast quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._huNE
 
@@ -288,6 +344,9 @@ class TCEntryAliases:
         """
         Returns the hurricane-force (>= 64kts) wind extent experienced in the
         cyclone's southeast quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._huSE
 
@@ -296,6 +355,9 @@ class TCEntryAliases:
         """
         Returns the hurricane-force (>= 64kts) wind extent experienced in the
         cyclone's southwest quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._huSW
 
@@ -304,6 +366,9 @@ class TCEntryAliases:
         """
         Returns the hurricane-force (>= 64kts) wind extent experienced in the
         cyclone's northwest quadrant.
+
+        Of note: as of the most-recent hurdat2 database releases, these extents
+        are only available for cyclones occurring since 2004.
         """
         return self._huNW
 
@@ -312,8 +377,24 @@ class TCEntryAliases:
         """
         Returns the radius from the center where the maximum winds are being
         experienced in nautical miles.
+
+        Of note: as of the most-recent hurdat2 database releases, this variable
+        is present for all cyclones since 2021. Select cyclones from previous
+        years may also have this available.
         """
         return self._maxwind_radius
+
+    @property
+    def rmw(self):
+        """
+        Returns the radius from the center where the maximum winds are being
+        experienced in nautical miles. (Also known as Radius of Maximum Winds)
+
+        Of note: as of the most-recent hurdat2 database releases, this variable
+        is present for all cyclones since 2021. Select cyclones from previous
+        years may also have this available.
+        """
+        return self.maxwind_radius
 
 
 
