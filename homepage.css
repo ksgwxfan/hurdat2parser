@@ -1,0 +1,61 @@
+h1, h2 {
+	text-align:center;
+	text-decoration: underline;
+}
+h2 {margin: 10px auto;}
+
+hr {
+	margin: 0 5%;
+	text-align: center;
+}
+
+.PRJLINX {
+	display: flex;
+	justify-content: center;
+	align-items: stretch;
+	flex-wrap: wrap;
+	font-weight: bold;
+	text-align: center;
+	font-size: 1.2em;
+	margin: 5px auto;
+}
+#statement {
+	width:85%;
+	margin: auto;
+	text-align: justify;
+	
+}
+.smalltext {
+	font-size: 65%;
+	color: grey;
+}
+.program {
+	border: 1px solid rgb(50, 50, 50);
+	border-radius: 15px 15px;
+	display: flex;
+	justify-content: center;
+	width: 30%;
+	flex-direction: column;
+	margin: 10px 5px;
+	padding: 20px 5px;
+}
+
+.program a {
+	overflow-wrap: break-word;
+}
+
+.program:hover {
+	background-color: rgb(10, 10, 10);
+}
+
+@media (orientation: portrait) {
+	.program {width: 40%;}
+}
+
+
+
+
+
+
+
+
