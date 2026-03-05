@@ -13,21 +13,21 @@ a:visited {color: lightblue;}
 #header {
 	width: 100%;
 	font-weight: bold;
-	margin-bottom: 20px;
-	/* text-decoration: underline; */
+	margin: 0.5em 0.5em;
 }
 #header a {
 	text-decoration-line: none;
 }
-#header #title {
+#title {
 	text-decoration: underline;
-	margin: 0 10px;
+	margin: 0 0.25em;
 }
 
 #headerphoto {
 	width: 3%;
 	min-width: 30px;
 	max-width: 100px;
+	aspect-ratio: 1 / 1;
 	border: 2px solid white;
 	box-shadow: 0px 0px 5px white;
 	vertical-align: middle;
